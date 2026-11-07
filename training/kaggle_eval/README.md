@@ -139,6 +139,42 @@ SICE is native-resolution and expensive. See
 [`../../docs/sice_evaluation.md`](../../docs/sice_evaluation.md) and run it as a
 separate batch with `--latency-runs 0`.
 
+## Controlled pretrained-versus-fine-tuned checkpoint matrix
+
+Use `training/kaggle_eval/compare_checkpoints.py` to compare one or more
+strictly compatible Zero-DCE++ checkpoints under the same datasets and
+pipeline settings. A valid single-checkpoint run is supported; the usual
+research comparison uses:
+
+- `pretrained`: the published Zero-DCE++ Epoch99 checkpoint
+  (`zero_dce_plus_plus.pth`).
+- `abhi`: the `best.pth` exported by the project's own fine-tuning run.
+
+A separate collaborator checkpoint is optional. Do not describe the published
+pretrained checkpoint as a collaborator's fine-tuned model unless that is what
+the file actually is. Checkpoints are supplied as Kaggle input datasets and
+are never committed to Git.
+
+Example:
+
+```bash
+python -m training.kaggle_eval.compare_checkpoints \
+  --config /kaggle/working/eval_config.json \
+  --checkpoint pretrained=/kaggle/input/zero-dce-plus-plus/zero_dce_plus_plus.pth \
+  --checkpoint abhi=/kaggle/input/abhi-lumenoir-finetuned/best.pth \
+  --datasets lol_v1,lol_v2_real,lol_v2_syn \
+  --device cuda \
+  --output-dir /kaggle/working/lumenoir-joint-matrix
+```
+
+The runner calculates SHA-256 for every supplied checkpoint, runs the shared
+Original/Classical reference once, then runs Deep Learning and Hybrid for each
+checkpoint across the Retinex/HueLock matrix. The output
+`matrix_manifest.json` records checkpoint labels, paths, hashes, settings,
+counts, failures and report locations. The reference and model runs are
+separate; a non-zero exit code means the matrix contains an error or no
+successful model run and must be inspected before drawing conclusions.
+
 ## Leakage check
 
 The read-only leakage audit consumes a manifest and never writes splits:
