@@ -23,23 +23,56 @@ metrics.
     `baseline_metrics.csv`, `validation_comparison.csv`, `run_config.json`,
     `summary.md`, `summary.json`.
 
-### Current materialized manifest scope
+### Full SICE + LOL research recipe
 
-The committed `training/splits/train.json` (1,565 records) and
-`validation.json` (391 records) currently contain LOL-v1, LOL-v2 Real and
-LOL-v2 Synthetic only. Although `split_spec.json` declares SICE Part 1
-(2,422 training images and 600 validation images), those SICE records are not
-present in the checked-in manifests. The current fine-tuning loader requires
-paired low/high records and does not yet consume SICE Part 1's single-image
-zero-reference records.
+The trainer accepts both paired LOL records and single-image SICE Part 1
+records. The model's training objective is zero-reference, so only the low-light
+input is passed to the loss function; a paired high/normal reference is never
+used as a training target.
 
-Therefore, the repository's default `zero_dce_plus_plus_lol.json` run is an
-LOL-only fine-tune, not the full SICE+LOL recipe in `final_decision.md` §1.3.
-Do not report SICE as part of the training data unless the actual
-`run_config.json` and manifests for that run confirm it. Extending the
-trainer to mix single-image SICE records with paired LOL validation data is a
-separate implementation task; it should be completed before claiming the full
-planned recipe.
+The recommended full recipe uses:
+
+- `training/splits/fine_tune.json`: the main split builder's fine-tune pool,
+  containing SICE Part 1 train images plus eligible LOL-v1 and LOL-v2 Real
+  low-light inputs.
+- `training/splits/validation.json`: SICE Part 1 validation images for
+  zero-reference validation loss plus paired LOL-v2 Real/Synthetic validation
+  records for PSNR/SSIM/LPIPS checkpoint selection.
+- `training/finetune/configs/zero_dce_plus_plus_full.json`: config that points
+  to these full manifests and enables the specified 50% synthetic darkening.
+
+Generate the split manifests from the validated datasets before using the full
+config:
+
+```bash
+python -m training.data_pipeline split \
+  --data-root datasets/raw \
+  --split-dir training/splits
+```
+
+The split command performs the pHash/SSIM test-leakage audit and writes the
+`fine_tune.json`, `validation.json`, `test.json`, unseen and do-no-harm pools.
+It requires the dataset folders and expected counts in the split specification.
+Do not use `--allow-count-mismatch` for a final research run; if a dataset is
+missing, fix the dataset tree instead of silently treating an incomplete split
+as the planned protocol.
+
+Dry-run the full config first:
+
+```bash
+python -m training.finetune --config training/finetune/configs/zero_dce_plus_plus_full.json --dry-run
+```
+
+The existing `zero_dce_plus_plus_lol.json` remains a backward-compatible
+LOL-only setup using the legacy paired `train.json`/ `validation.json`
+manifests (1,565 train / 391 validation records). Its output must be described
+as LOL-only. The full config reports paired and zero-reference counts separately
+in the CLI, `summary.json` and `summary.md`.
+
+The training loader applies geometric augmentation and the documented
+50% linear-domain darkening plus shot/read-noise augmentation to each low-light
+training input. It supports a mixed batch of paired LOL and unpaired SICE
+records without fabricating target images.
 
 ## Loss terms
 

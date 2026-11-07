@@ -59,6 +59,7 @@ class TrainConfig:
     batch_size: int = 8
     num_workers: int = 4
     crop_size: int = 384
+    darkening_probability: float = 0.5
     scale_factor: int = 1
     epochs: int = 30
     learning_rate: float = 2e-5
@@ -90,6 +91,8 @@ class TrainConfig:
             raise ValueError("num_workers must be non-negative.")
         if self.crop_size < 8:
             raise ValueError("crop_size must be at least 8.")
+        if not 0.0 <= self.darkening_probability <= 1.0:
+            raise ValueError("darkening_probability must be in [0, 1].")
         if not 1 <= self.scale_factor <= 12:
             raise ValueError("scale_factor must be in [1, 12].")
         if self.learning_rate <= 0 or self.weight_decay < 0:
@@ -118,6 +121,7 @@ class TrainConfig:
             "batch_size": self.batch_size,
             "num_workers": self.num_workers,
             "crop_size": self.crop_size,
+            "darkening_probability": self.darkening_probability,
             "scale_factor": self.scale_factor,
             "epochs": self.epochs,
             "learning_rate": self.learning_rate,
@@ -186,6 +190,7 @@ class TrainConfig:
             batch_size=int(payload.get("batch_size", 8)),
             num_workers=int(payload.get("num_workers", 4)),
             crop_size=int(payload.get("crop_size", 384)),
+            darkening_probability=float(payload.get("darkening_probability", 0.5)),
             scale_factor=int(payload.get("scale_factor", 1)),
             epochs=int(payload.get("epochs", 30)),
             learning_rate=float(payload.get("learning_rate", 2e-5)),

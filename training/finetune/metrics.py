@@ -45,6 +45,10 @@ def evaluate_network(
     selected = pairs if max_images is None else pairs[:max_images]
     with torch.no_grad():
         for pair in selected:
+            if pair.high is None:
+                raise ValueError(
+                    f"Reference metrics require a paired record; {pair.image_id} has no high image."
+                )
             low_np = load_rgb_float32(pair.low)
             high_np = load_rgb_float32(pair.high)
             low_tensor = torch.from_numpy(

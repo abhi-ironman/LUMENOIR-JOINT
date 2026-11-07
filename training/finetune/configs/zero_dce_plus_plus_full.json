@@ -1,0 +1,49 @@
+{
+  "train_manifest": "training/splits/fine_tune.json",
+  "validation_manifest": "training/splits/validation.json",
+  "data_root": "/kaggle/input/datasets/chiranth25x/lumenoir-low-light-datasets",
+  "pretrained_weights": "/kaggle/working/zero_dce_plus_plus.pth",
+  "output_dir": "/kaggle/working/lumenoir-zero-dce-finetune-full",
+  "seed": 42,
+  "device": "cuda",
+  "amp": true,
+  "batch_size": 8,
+  "num_workers": 4,
+  "crop_size": 384,
+  "darkening_probability": 0.5,
+  "scale_factor": 1,
+  "epochs": 30,
+  "learning_rate": 0.00002,
+  "weight_decay": 0.0001,
+  "grad_clip_norm": 0.1,
+  "metrics_device": "cuda",
+  "validation_metrics": [
+    "psnr",
+    "ssim",
+    "lpips"
+  ],
+  "max_train_images": null,
+  "max_val_images": null,
+  "log_every": 10,
+  "save_every": 1,
+  "resume": null,
+  "loss": {
+    "spatial": 1,
+    "exposure": 10,
+    "color": 3.5,
+    "tv_alpha": 1600,
+    "highlight": 5,
+    "hue": 2,
+    "exposure_target": 0.6
+  },
+  "scheduler": {
+    "name": "reduce_on_plateau",
+    "factor": 0.5,
+    "patience": 2,
+    "min_lr": 0.000001
+  },
+  "early_stopping": {
+    "patience": 5,
+    "min_delta": 0.002
+  }
+}

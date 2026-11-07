@@ -160,13 +160,15 @@ strict-load-compatible `best.pth` plus a resumable `last_training.pt`.
 - See [`training/finetune/README.md`](../training/finetune/README.md) for the
   Colab/Kaggle setup, dry-run, training, outputs and validation procedure.
 
-**Dataset-scope note:** the default fine-tuning config currently consumes
-the committed 1,565 LOL training and 391 LOL validation pairs only. The split
-specification also proposes SICE Part 1, but SICE single-image records are not
-in the committed manifests and are not supported by the current pair-only
-fine-tuning loader. See
-[`training/finetune/README.md`](../training/finetune/README.md) before
-describing a checkpoint as SICE-trained.
+**Dataset-scope note:** the legacy `zero_dce_plus_plus_lol.json` config
+uses the committed 1,565 LOL train and 391 LOL validation pairs. The full
+`zero_dce_plus_plus_full.json` config supports the planned SICE+LOL recipe:
+SICE Part 1 is consumed as single-image zero-reference data, and paired LOL
+validation records remain responsible for PSNR/SSIM/LPIPS checkpoint selection.
+The split builder must first generate `fine_tune.json` and the mixed
+`validation.json` from the real datasets. See
+[`training/finetune/README.md`](../training/finetune/README.md) for the exact
+data preparation and dry-run procedure.
 
 The original Zero-DCE++ paper implementation used CUDA-specific helper code
 and an old torchvision weights API; the repository's trainer uses the current

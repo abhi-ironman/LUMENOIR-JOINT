@@ -16,10 +16,11 @@ desktops.
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
 > the reference and fallback. Classical mode works without a model;
 > deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint.
-> LOL train/validation manifests are committed (1,565 train pairs and 391
-> validation pairs); 118 test-leaking candidates were excluded. SICE Part 1 is
-> in the split specification but not yet in those manifests or the pair-only
-> trainer. Dataset images remain outside Git; ExDark and DICM are not local.
+> The committed legacy train/validation manifests contain 1,565/391 LOL
+> records. The full SICE+LOL zero-reference trainer is implemented; generate
+> the main split builder's fine_tune.json and mixed validation.json to use it.
+> The split builder performs the test-leakage audit. Dataset images remain
+> outside Git; ExDark and DICM must be supplied for the complete protocol.
 > No full standardized evaluation has been run.
 
 ---

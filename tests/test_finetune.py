@@ -19,12 +19,15 @@ from training.finetune.config import (
     TrainConfig,
 )
 from training.finetune.data import (
+    PairRecord,
     PairedDataset,
+    is_test_path,
     load_pairs,
     load_train_validation_pairs,
+    make_loader,
 )
 from training.finetune.losses import zero_dce_loss
-from training.finetune.metrics import validation_objective
+from training.finetune.metrics import validation_loss, validation_objective
 
 
 def _image(path: Path, seed: int, size: int = 32) -> None:
@@ -79,6 +82,114 @@ def _config(tmp_path: Path, *, pretrained: Path, output: Path) -> TrainConfig:
         scheduler=SchedulerSettings(name="reduce_on_plateau", patience=1),
         early_stopping=EarlyStoppingSettings(patience=1, min_delta=0.0),
     )
+
+
+
+def _single_image(root: Path, split: str, index: int) -> dict[str, object]:
+    low = root / "sice" / split / "single" / f"{index}.png"
+    _image(low, index + 301)
+    return {
+        "id": f"sice:{split}/single/{index}.png",
+        "dataset": "sice",
+        "group": "part1",
+        "low": f"sice/{split}/single/{index}.png",
+        "high": None,
+        "has_gt": False,
+    }
+
+
+def test_load_pairs_accepts_single_image_sice_from_full_split_pool(tmp_path) -> None:
+    data_root = tmp_path / "data"
+    record = _single_image(data_root, "part1", 0)
+    manifest = _manifest(tmp_path / "fine_tune.json", [record], "fine_tune")
+
+    loaded = load_pairs(
+        manifest,
+        expected_split="train",
+        data_root=data_root,
+    )
+
+    assert len(loaded) == 1
+    assert loaded[0].dataset == "sice"
+    assert loaded[0].high is None
+    assert loaded[0].low.is_file()
+
+
+def test_unpaired_sice_is_rejected_from_test_and_do_no_harm_folders(tmp_path) -> None:
+    data_root = tmp_path / "data"
+    low = data_root / "sice/part2_lowlight/image.png"
+    _image(low, 55)
+    record = {
+        "dataset": "sice",
+        "image_id": "part2_lowlight/image.png",
+        "low": "sice/part2_lowlight/image.png",
+        "high": None,
+        "has_gt": False,
+    }
+    manifest = _manifest(tmp_path / "train.json", [record], "fine_tune")
+
+    with pytest.raises(ValueError, match="test/do-no-harm path"):
+        load_pairs(manifest, expected_split="train", data_root=data_root)
+
+    bright = data_root / "sice/do_no_harm/image.png"
+    _image(bright, 56)
+    assert is_test_path(bright, data_root)
+
+
+def test_training_loader_batches_paired_and_unpaired_inputs(tmp_path) -> None:
+    data_root = tmp_path / "data"
+    _pair(data_root, "train", 0)
+    single_record = _single_image(data_root, "part1", 0)
+    paired = PairRecord(
+        dataset="lol_v1",
+        image_id="train/low/0.png",
+        low=data_root / "train/low/0.png",
+        high=data_root / "train/high/0.png",
+    )
+    single = PairRecord(
+        dataset="sice",
+        image_id=str(single_record["id"]),
+        low=data_root / str(single_record["low"]),
+        high=None,
+    )
+
+    dataset = PairedDataset(
+        [paired, single],
+        crop_size=16,
+        train=True,
+        seed=42,
+        darkening_probability=0.0,
+    )
+    loader = make_loader(
+        dataset,
+        batch_size=2,
+        shuffle=False,
+        num_workers=0,
+        seed=42,
+        epoch=0,
+    )
+    batch = next(iter(loader))
+
+    assert batch["low"].shape == (2, 3, 16, 16)
+    assert batch["has_reference"] == [True, False]
+    assert batch["dataset"] == ["lol_v1", "sice"]
+
+
+def test_zero_reference_validation_loss_accepts_single_image_records(tmp_path) -> None:
+    low = tmp_path / "sice/part1/image.png"
+    _image(low, 57, size=32)
+    record = PairRecord(dataset="sice", image_id="part1/image.png", low=low, high=None)
+    net = ZeroDCEPlusPlusNet(scale_factor=1)
+
+    loss = validation_loss(
+        net,
+        [record],
+        weights=LossWeights(),
+        device=torch.device("cpu"),
+        amp=False,
+    )
+
+    assert np.isfinite(loss)
 
 
 def test_config_round_trip_and_validation(tmp_path) -> None:
