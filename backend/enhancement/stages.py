@@ -31,6 +31,7 @@ from ..classical_cv.scan import LumenScanResult, scan
 from ..fusion.lumen_fuse import fuse as fuse_candidates
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
 from ..inference.manager import ModelManager
+from .phase_engine import PhaseOverrides, apply_phase_overrides
 from ..runtime.config import PipelineRuntime
 from .types import (
     ArtifactKind,
@@ -72,6 +73,7 @@ class StageContext:
     capture_diagnostics: bool = False
     diagnostics: dict[str, object] = field(default_factory=dict)
     diagnostic_images: dict[str, Image.Image] = field(default_factory=dict)
+    phase_overrides: PhaseOverrides = field(default_factory=PhaseOverrides)
 
     def publish(self, kind: ArtifactKind, image: Image.Image) -> None:
         """Record an intermediate result so it can be reported to the client."""
@@ -156,8 +158,11 @@ def _map_to_pil(array: np.ndarray, *, vmax: float, name: str) -> Image.Image:
     return Image.fromarray(np.round(encoded * 255.0).astype(np.uint8))
 
 
-def _retinex_config_from_environment() -> LumenRetinexConfig:
-    """Resolve the same illumination downsample factor for CPU and GPU."""
+def _retinex_config_from_environment(
+    overrides: PhaseOverrides | None = None,
+) -> LumenRetinexConfig:
+    """Resolve shared CPU/GPU Retinex settings and retry shoulder changes."""
+    overrides = overrides or PhaseOverrides()
     raw = os.getenv("LUMENOIR_RETINEX_DOWNSAMPLE", "2").strip()
     try:
         downsample = int(raw)
@@ -167,7 +172,11 @@ def _retinex_config_from_environment() -> LumenRetinexConfig:
         ) from exc
     if not 1 <= downsample <= 4:
         raise ValueError("LUMENOIR_RETINEX_DOWNSAMPLE must be between 1 and 4.")
-    return LumenRetinexConfig(illumination_downsample=downsample)
+    shoulder_start = float(np.clip(0.85 + overrides.shoulder_start_delta, 0.55, 0.99))
+    return LumenRetinexConfig(
+        illumination_downsample=downsample,
+        shoulder_start=shoulder_start,
+    )
 
 
 def _hue_lock_config_from_environment() -> HueLockConfig:
@@ -206,9 +215,12 @@ class AnalysisStage(ImplementedStage):
             from ..classical_cv.torch_scan import scan_tensor
 
             context.rgb_tensor = context.ops.ensure(context.rgb)
-            context.scan_result = scan_tensor(context.rgb_tensor, ops=context.ops)
+            measured = scan_tensor(context.rgb_tensor, ops=context.ops)
         else:
-            context.scan_result = scan(context.rgb)
+            measured = scan(context.rgb)
+        context.scan_result = apply_phase_overrides(
+            measured, context.phase_overrides
+        )
         context.bypass = bool(context.scan_result.parameters.bypass_gate)
         if context.capture_diagnostics:
             context.diagnostics["scan"] = context.scan_result.as_dict()
@@ -258,7 +270,7 @@ class ClassicalStage(ImplementedStage):
             result = enhance_tensor(
                 context.rgb_tensor,
                 scan_result=context.scan_result,
-                config=_retinex_config_from_environment(),
+                config=_retinex_config_from_environment(context.phase_overrides),
                 ops=context.ops,
             )
             context.classical_tensor = result.image
@@ -268,7 +280,7 @@ class ClassicalStage(ImplementedStage):
             result = retinex_enhance(
                 context.rgb,
                 scan_result=context.scan_result,
-                config=_retinex_config_from_environment(),
+                config=_retinex_config_from_environment(context.phase_overrides),
             )
             context.classical = result.image
             context.enhanced = result.image
@@ -302,6 +314,12 @@ class DeepLearningStage(ImplementedStage):
         if context.ops is not None:
             outcome = manager.infer_tensor(context.rgb_tensor)
             tensor = outcome.image
+            strength = float(context.phase_overrides.dl_strength_scale)
+            if strength < 1.0:
+                tensor = (
+                    context.rgb_tensor
+                    + strength * (tensor - context.rgb_tensor)
+                ).clamp(0.0, 1.0)
             if tuple(tensor.shape) != tuple(context.rgb.shape):
                 raise InferenceFailedError(
                     f"The model returned {tuple(tensor.shape)}, expected "
@@ -323,6 +341,15 @@ class DeepLearningStage(ImplementedStage):
             finally:
                 outcome.image.close()
 
+            strength = float(context.phase_overrides.dl_strength_scale)
+            if strength < 1.0:
+                array = np.ascontiguousarray(
+                    np.clip(
+                        context.rgb + strength * (array - context.rgb),
+                        0.0,
+                        1.0,
+                    ).astype(np.float32)
+                )
             if array.shape != context.rgb.shape:
                 raise InferenceFailedError(
                     f"The model returned {array.shape}, expected {context.rgb.shape}."
@@ -435,18 +462,28 @@ class DenoisingStage(ImplementedStage):
         if context.ops is not None:
             from ..classical_cv.torch_edge_guard import denoise_tensor
 
+            sigma = (
+                context.scan_result.features.noise_sigma
+                * context.phase_overrides.denoise_strength_scale
+            )
             result = denoise_tensor(
                 context.enhanced_tensor,
                 context.rgb_tensor,
+                sigma=sigma,
                 scan_result=context.scan_result,
                 ops=context.ops,
             )
             context.enhanced_tensor = result.image
             array = context.ops.to_numpy(result.image)
         else:
+            sigma = (
+                context.scan_result.features.noise_sigma
+                * context.phase_overrides.denoise_strength_scale
+            )
             result = edge_guard_denoise(
                 context.enhanced,
                 context.rgb,
+                sigma=sigma,
                 scan_result=context.scan_result,
             )
             context.enhanced = result.image

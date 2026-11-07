@@ -76,3 +76,26 @@ The new CPU/GPU HueLock paths, stage environment wiring and regression tests hav
 The optional `training.benchmarks.validate_fp16_parity_gpu` tool runs the full pipeline on the same NVIDIA CUDA device in FP32 and FP16. It enforces CUDA, audits model parameter dtypes, traps CPU stage fallbacks and captures final images before pipeline results are released. It reports MAE, maximum absolute pixel difference, PSNR and SSIM between the two precision outputs, with visual difference panels.
 
 These are *precision-agreement* metrics, not enhancement-quality metrics against ground truth. The tool does not measure latency; use `training.benchmarks.benchmark_full_pipeline_gpu` for performance. The Kaggle notebook provides an optional 10-image check for each supplied checkpoint on LOL-v2 Real.
+
+
+## Optional closed-loop Phase Engine
+
+The §5.7 Phase Engine is available on the integration branch. It runs one
+baseline pass and at most two corrective retries, always starting from the
+original input. The first applicable rule is chosen in the documented order:
+reduce gain / lower the shoulder for new clipping; adjust the target brightness
+when the input noise cap is not binding; strengthen EdgeGuard while reducing
+gain for excess output noise; or reduce HueLock and DL-branch strength for
+excess mean hue shift. It returns the completed pass with the lowest
+Q = 10·new_clip + 2·|median_Y − 0.45| + 10·sigma_out.
+
+Enable it with LUMENOIR_CLOSED_LOOP_ENABLED=true, or call
+EnhancementPipeline.run(..., closed_loop=True). It is disabled by default,
+so the existing baseline path and shared-stage cache are unchanged. Closed-loop
+passes deliberately do not reuse cached prefix stages because their parameters
+differ. The do-no-harm input bypass runs only the baseline pass.
+
+The retry correction factors (0.80 gain after clipping, −0.10 shoulder start,
+1.50 denoising multiplier, 0.85 gain after noise, and 0.80 HueLock/DL strength
+after colour shift) are initial engineering settings, not measured optima.
+Validate them on paired validation data before enabling this feature by default.

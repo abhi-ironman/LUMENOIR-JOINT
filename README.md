@@ -10,8 +10,9 @@ desktops.
 
 > **Status: full enhancement pipeline integrated, CPU and accelerator paths.**
 > Upload validation, LumenScan, LumenRetinex, pretrained Zero-DCE++ inference,
-> LumenFuse, EdgeGuard, HueLock, the adaptive alpha blend, the dataset pipeline,
-> the evaluation framework, the **Kaggle evaluation runner** and the frontend
+> LumenFuse, EdgeGuard, HueLock, the bounded opt-in Phase Engine, the adaptive
+> alpha blend, the dataset pipeline, the evaluation framework, the **Kaggle
+> evaluation runner** and the frontend
 > workspace are implemented. **`POST /api/enhance` now returns an enhanced
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
 > the reference and fallback. Classical mode works without a model;
@@ -54,6 +55,7 @@ desktops.
 | Deep learning architecture, weights, inference | **Implemented** (pretrained Zero-DCE++, wired into the pipeline) |
 | Adaptive fusion, fusion weights, parameter selection | **Implemented** |
 | Paired Zero-DCE++ fine-tuning | **Implemented** (`training/finetune`; requires a separate paired train/validation manifest and checkpoint) |
+| Closed-loop Phase Engine (§5.7) | **Implemented** (opt-in; baseline is unchanged unless enabled) |
 
 `POST /api/enhance` returns `200` with a base64 PNG for implemented modes.
 Classical mode works without a model; `deep_learning` and `hybrid` return `503`
@@ -425,17 +427,19 @@ These decisions belong to research and remain open — nothing here guesses at
 them, not even a temporary version:
 
 - model training, fine-tuning, checkpoint export
-- quality-based output selection across multiple complete runs, the closed-loop
-  proxies and Optuna coefficient tuning
+- cross-checkpoint / cross-configuration quality selection and Optuna coefficient
+  tuning (the bounded per-image Phase Engine is implemented)
 - region-aware enhancement, additional overexposure protection beyond the
   implemented gain/shoulder/original-candidate layers
 - ablation runs, benchmark tables and deployment-target choice
 - actual train/validation/test files (the rules are implemented; they are
   generated only once the datasets are downloaded)
 
-The full enhancement pipeline, all six modules, the alpha blend and the API
-integration are implemented. The closed-loop proxies (§5.7), Optuna tuning
-(§5.6), dataset evaluation and fine-tuning are not.
+The full enhancement pipeline, all six modules, the alpha blend, the API
+integration and the bounded Phase Engine (§5.7) are implemented. The Phase
+Engine is opt-in and retains the lowest-proxy result from at most three passes.
+Optuna tuning (§5.6), real-dataset evaluation and ablations still require
+external datasets and measured runs.
 
 Also intentionally absent: database, authentication, image storage and any
 background queue. The runtime image now installs NumPy and OpenCV because the
