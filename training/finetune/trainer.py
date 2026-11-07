@@ -117,6 +117,9 @@ class FineTuner:
                 "Validation needs at least one paired LOL record for PSNR/SSIM/LPIPS; "
                 "single-image records contribute only zero-reference validation loss."
             )
+        self.validation_zero_reference_pairs = [
+            pair for pair in self.validation_pairs if not pair.has_reference
+        ]
 
         self.train_dataset = PairedDataset(
             self.train_pairs,
@@ -347,7 +350,7 @@ class FineTuner:
     def _validate(self, epoch: int) -> tuple[float, dict[str, float], list[dict[str, Any]]]:
         val_loss = validation_loss(
             self.net,
-            self.validation_pairs,
+            self.validation_zero_reference_pairs or self.validation_pairs,
             weights=self.config.loss,
             device=self.device,
             amp=self.amp,
@@ -432,9 +435,7 @@ class FineTuner:
             "train_images": len(self.train_pairs),
             "validation_images": len(self.validation_pairs),
             "validation_paired_images": len(self.validation_metric_pairs),
-            "validation_zero_reference_images": sum(
-                not pair.has_reference for pair in self.validation_pairs
-            ),
+            "validation_zero_reference_images": len(self.validation_zero_reference_pairs),
             "train_paired_images": sum(pair.has_reference for pair in self.train_pairs),
             "train_zero_reference_images": sum(
                 not pair.has_reference for pair in self.train_pairs
