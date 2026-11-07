@@ -56,7 +56,10 @@ class DLPrimaryFusionResult:
 
 def _mean(value) -> float:
     if hasattr(value, "detach"):
-        return float(value.detach().to(dtype=value.dtype).mean().item())
+        tensor = value.detach()
+        if not tensor.is_floating_point():
+            tensor = tensor.to(dtype=tensor.new_empty(()).float().dtype)
+        return float(tensor.mean().item())
     return float(np.mean(value))
 
 
