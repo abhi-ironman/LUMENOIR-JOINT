@@ -201,3 +201,23 @@ def test_joint_matrix_checkpoint_parser_requires_existing_file(tmp_path):
         _checkpoint_arg(f"bad label={checkpoint}")
     with pytest.raises(Exception):
         _checkpoint_arg(f"missing={tmp_path / 'missing.pth'}")
+
+def test_joint_matrix_uses_the_pipeline_environment_names(monkeypatch):
+    import os
+    from training.kaggle_eval.compare_checkpoints import (
+        HUE_ANCHOR_ENV,
+        MODEL_SCALE_ENV,
+        RETINEX_ENV,
+        _pipeline_environment,
+    )
+
+    assert HUE_ANCHOR_ENV == "LUMENOIR_HUELOCK_SOURCE_ANCHOR"
+    assert MODEL_SCALE_ENV == "LUMENOIR_ZERODCE_SCALE_FACTOR"
+    monkeypatch.delenv(HUE_ANCHOR_ENV, raising=False)
+    monkeypatch.delenv(MODEL_SCALE_ENV, raising=False)
+    with _pipeline_environment(3, 0.45, 1):
+        assert os.environ[RETINEX_ENV] == "3"
+        assert os.environ[HUE_ANCHOR_ENV] == "0.45"
+        assert os.environ[MODEL_SCALE_ENV] == "1"
+    assert HUE_ANCHOR_ENV not in os.environ
+    assert MODEL_SCALE_ENV not in os.environ
