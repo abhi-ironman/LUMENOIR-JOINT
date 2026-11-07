@@ -30,7 +30,8 @@ from .config import EvalConfig
 from .runner import RunSummary, run_evaluation
 
 RETINEX_ENV = "LUMENOIR_RETINEX_DOWNSAMPLE"
-HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"\nMODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
+HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"
+MODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
 DEFAULT_DATASETS = ("lol_v1", "lol_v2_real", "lol_v2_syn")
 
 
@@ -60,7 +61,9 @@ def _sha256(path: Path) -> str:
 
 
 @contextmanager
-def _pipeline_environment(\n    retinex_downsample: int, hue_anchor: float, model_scale_factor: int = 1\n) -> Iterator[None]:
+def _pipeline_environment(
+    retinex_downsample: int, hue_anchor: float, model_scale_factor: int = 1
+) -> Iterator[None]:
     if not 1 <= retinex_downsample <= 4:
         raise ValueError("Retinex downsample must be in [1, 4].")
     if not 0.0 <= hue_anchor <= 0.55:
