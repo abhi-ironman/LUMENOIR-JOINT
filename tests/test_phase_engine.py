@@ -6,15 +6,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from backend.classical_cv.scan import scan
 from backend.enhancement.phase_engine import (
     PhaseEngine,
     PhaseEngineConfig,
     PhaseOverrides,
     apply_phase_overrides,
+    input_noise_cap_is_binding,
     measure_phase_metrics,
 )
+from backend.enhancement.pipeline import EnhancementPipeline
 from backend.enhancement.types import PipelineResult, ProcessingStatus
-from backend.classical_cv.scan import scan
 
 
 def _result(array: np.ndarray, total_ms: float = 2.0) -> PipelineResult:
@@ -191,3 +193,62 @@ def test_do_no_harm_bypass_runs_only_the_baseline_pass() -> None:
 def test_config_rejects_more_than_two_extra_passes() -> None:
     with pytest.raises(ValueError, match="between 0 and 2"):
         PhaseEngineConfig(max_extra_passes=3)
+
+
+
+def test_brightness_correction_respects_the_input_noise_cap() -> None:
+    source = np.full((64, 64, 3), 0.10, dtype=np.float32)
+    bright = np.full_like(source, 0.80)
+    seen: list[PhaseOverrides] = []
+
+    def run_pass(overrides: PhaseOverrides) -> PipelineResult:
+        seen.append(overrides)
+        return _result(bright)
+
+    result = PhaseEngine().run(original=source, run_pass=run_pass)
+    try:
+        assert len(seen) == 2
+        assert seen[1].target_brightness == pytest.approx(0.38)
+    finally:
+        result.release()
+
+    rng = np.random.default_rng(42)
+    noisy_gray = np.clip(
+        0.30 + rng.normal(0.0, 0.05, (64, 64)), 0.0, 1.0
+    ).astype(np.float32)
+    noisy_source = np.repeat(noisy_gray[..., None], 3, axis=2)
+    assert input_noise_cap_is_binding(noisy_source)
+
+    calls = 0
+
+    def run_noisy(_overrides: PhaseOverrides) -> PipelineResult:
+        nonlocal calls
+        calls += 1
+        return _result(bright)
+
+    capped = PhaseEngine().run(original=noisy_source, run_pass=run_noisy)
+    try:
+        assert calls == 1
+        assert capped.diagnostics["phase_engine"]["noise_cap_binding"] is True
+        assert capped.diagnostics["phase_engine"]["stop_reason"] == (
+            "no_matching_correction"
+        )
+    finally:
+        capped.release()
+
+
+def test_pipeline_phase_engine_is_opt_in() -> None:
+    image = Image.new("RGB", (64, 64), (15, 15, 15))
+    pipeline = EnhancementPipeline()
+
+    baseline = pipeline.run(image, mode="classical", closed_loop=False)
+    enabled = pipeline.run(image, mode="classical", closed_loop=True)
+
+    try:
+        assert "phase_engine" not in baseline.diagnostics
+        assert "phase_engine" in enabled.diagnostics
+        assert 1 <= enabled.diagnostics["phase_engine"]["attempt_count"] <= 3
+    finally:
+        baseline.release()
+        enabled.release()
+        image.close()

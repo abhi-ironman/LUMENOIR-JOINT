@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, replace
-from typing import Callable
+from collections.abc import Callable
 
 import cv2
 import numpy as np

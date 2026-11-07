@@ -31,8 +31,8 @@ from ..classical_cv.scan import LumenScanResult, scan
 from ..fusion.lumen_fuse import fuse as fuse_candidates
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
 from ..inference.manager import ModelManager
-from .phase_engine import PhaseOverrides, apply_phase_overrides
 from ..runtime.config import PipelineRuntime
+from .phase_engine import PhaseOverrides, apply_phase_overrides
 from .types import (
     ArtifactKind,
     EnhancementMode,

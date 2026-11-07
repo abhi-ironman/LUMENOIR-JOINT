@@ -426,7 +426,7 @@ Model load (including the first torch import) took about 1.2 s at startup.
 These decisions belong to research and remain open — nothing here guesses at
 them, not even a temporary version:
 
-- model training, fine-tuning, checkpoint export
+- large-scale training runs and final checkpoint export (the paired fine-tuning trainer is implemented)
 - cross-checkpoint / cross-configuration quality selection and Optuna coefficient
   tuning (the bounded per-image Phase Engine is implemented)
 - region-aware enhancement, additional overexposure protection beyond the
