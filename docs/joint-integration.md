@@ -74,6 +74,14 @@ The §5.8 SSIM guard is implemented for CPU and tensor execution: on non-dark in
 
 A paired Kaggle evaluation is still required before promoting Retinex/HueLock settings or Phase Engine retry coefficients as measured optima. The current values remain experimental defaults.
 
+An additional opt-in `dl_primary` hybrid strategy is available through
+`LUMENOIR_HYBRID_STRATEGY=dl_primary` or the checkpoint comparison CLI flag.
+It keeps Zero-DCE++ as the base and applies only a bounded, noise-gated
+high-frequency luminance correction when the classical detail is more consistent
+with the source detail. The legacy LumenFuse remains the default. The new
+strategy is experimental and must be evaluated on held-out validation data
+before it can be recommended or enabled by default.
+
 
 ## FP32 versus FP16 parity
 
