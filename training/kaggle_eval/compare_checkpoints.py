@@ -33,6 +33,8 @@ RETINEX_ENV = "LUMENOIR_RETINEX_DOWNSAMPLE"
 HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"
 MODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
 HYBRID_STRATEGY_ENV = "LUMENOIR_HYBRID_STRATEGY"
+DL_PRIMARY_STRENGTH_ENV = "LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH"
+DL_PRIMARY_CAP_ENV = "LUMENOIR_DL_PRIMARY_MAX_CORRECTION"
 DEFAULT_DATASETS = ("lol_v1", "lol_v2_real", "lol_v2_syn")
 
 
@@ -67,6 +69,8 @@ def _pipeline_environment(
     hue_anchor: float,
     model_scale_factor: int = 1,
     hybrid_strategy: str = "legacy",
+    dl_primary_strength: float = 0.20,
+    dl_primary_max_correction: float = 0.015,
 ) -> Iterator[None]:
     if not 1 <= retinex_downsample <= 4:
         raise ValueError("Retinex downsample must be in [1, 4].")
@@ -76,13 +80,26 @@ def _pipeline_environment(
         raise ValueError("Zero-DCE++ scale factor must be in [1, 12].")
     if hybrid_strategy not in {"legacy", "dl_primary"}:
         raise ValueError("hybrid_strategy must be 'legacy' or 'dl_primary'.")
+    if not 0.0 <= dl_primary_strength <= 2.0:
+        raise ValueError("DL-primary correction strength must be in [0, 2].")
+    if not 0.0 <= dl_primary_max_correction <= 0.10:
+        raise ValueError("DL-primary maximum correction must be in [0, 0.10].")
 
-    keys = (RETINEX_ENV, HUE_ANCHOR_ENV, MODEL_SCALE_ENV, HYBRID_STRATEGY_ENV)
+    keys = (
+        RETINEX_ENV,
+        HUE_ANCHOR_ENV,
+        MODEL_SCALE_ENV,
+        HYBRID_STRATEGY_ENV,
+        DL_PRIMARY_STRENGTH_ENV,
+        DL_PRIMARY_CAP_ENV,
+    )
     previous = {key: os.environ.get(key) for key in keys}
     os.environ[RETINEX_ENV] = str(retinex_downsample)
     os.environ[HUE_ANCHOR_ENV] = f"{hue_anchor:.4f}".rstrip("0").rstrip(".")
     os.environ[MODEL_SCALE_ENV] = str(model_scale_factor)
     os.environ[HYBRID_STRATEGY_ENV] = hybrid_strategy
+    os.environ[DL_PRIMARY_STRENGTH_ENV] = str(dl_primary_strength)
+    os.environ[DL_PRIMARY_CAP_ENV] = str(dl_primary_max_correction)
     try:
         yield
     finally:
@@ -112,9 +129,16 @@ def _run_one(
     hue_anchor: float,
     model_scale_factor: int,
     hybrid_strategy: str = "legacy",
+    dl_primary_strength: float = 0.20,
+    dl_primary_max_correction: float = 0.015,
 ) -> dict[str, object]:
     with _pipeline_environment(
-        retinex_downsample, hue_anchor, model_scale_factor, hybrid_strategy
+        retinex_downsample,
+        hue_anchor,
+        model_scale_factor,
+        hybrid_strategy,
+        dl_primary_strength,
+        dl_primary_max_correction,
     ):
         summary = run_evaluation(config.replace(output_dir=output_dir))
     return {
@@ -122,6 +146,8 @@ def _run_one(
         "hue_lock_source_anchor": hue_anchor,
         "model_scale_factor": model_scale_factor,
         "hybrid_strategy": hybrid_strategy,
+        "dl_primary_correction_strength": dl_primary_strength,
+        "dl_primary_max_correction": dl_primary_max_correction,
         **_summary_dict(summary),
     }
 
@@ -154,6 +180,20 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("legacy", "dl_primary"),
         default="legacy",
         help="Hybrid fusion strategy; legacy remains the default.",
+    )
+    parser.add_argument(
+        "--dl-primary-strength",
+        type=float,
+        nargs="+",
+        default=[0.20],
+        help="DL-primary correction strengths to evaluate (0-2).",
+    )
+    parser.add_argument(
+        "--dl-primary-max-correction",
+        type=float,
+        nargs="+",
+        default=[0.015],
+        help="Maximum absolute luma corrections to evaluate (0-0.10).",
     )
     parser.add_argument("--latency-warmups", type=int, default=None)
     parser.add_argument("--latency-runs", type=int, default=None)
@@ -210,6 +250,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--retinex-downsample values must be between 1 and 4.")
     if any(not 0.0 <= value <= 0.55 for value in args.hue_anchor):
         parser.error("--hue-anchor values must be between 0 and 0.55.")
+    if any(not 0.0 <= value <= 2.0 for value in args.dl_primary_strength):
+        parser.error("--dl-primary-strength values must be between 0 and 2.")
+    if any(not 0.0 <= value <= 0.10 for value in args.dl_primary_max_correction):
+        parser.error("--dl-primary-max-correction values must be between 0 and 0.10.")
     if len(set(args.retinex_downsample)) != len(args.retinex_downsample):
         parser.error("--retinex-downsample values must be unique.")
     if len(set(args.hue_anchor)) != len(args.hue_anchor):
@@ -247,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
         "device": base_config.device,
         "model_scale_factor": args.model_scale_factor,
         "hybrid_strategy": args.hybrid_strategy,
+        "dl_primary_strength_values": args.dl_primary_strength,
+        "dl_primary_max_correction_values": args.dl_primary_max_correction,
         "latency_warmups": base_config.latency_warmups,
         "latency_runs": base_config.latency_runs,
         "retinex_downsample_values": args.retinex_downsample,
@@ -263,7 +309,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_reference:
         try:
             with _pipeline_environment(
-                2, 0.0, args.model_scale_factor, args.hybrid_strategy
+                2,
+                0.0,
+                args.model_scale_factor,
+                args.hybrid_strategy,
+                args.dl_primary_strength[0],
+                args.dl_primary_max_correction[0],
             ):
                 reference = run_evaluation(base_config)
             matrix["reference_run"] = _summary_dict(reference)
@@ -279,15 +330,21 @@ def main(argv: list[str] | None = None) -> int:
     for label, checkpoint in args.checkpoint:
         for downsample in args.retinex_downsample:
             for anchor in args.hue_anchor:
-                run_label = (
-                    f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
-                )
-                run_dir = (
-                    args.output_dir
-                    / label
-                    / f"retinex-{downsample}_anchor-{anchor:g}"
-                )
-                try:
+              for correction_strength in args.dl_primary_strength:
+                for correction_cap in args.dl_primary_max_correction:
+                  run_label = (
+                      f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
+                      f"/strength-{correction_strength:g}/cap-{correction_cap:g}"
+                  )
+                  run_dir = (
+                      args.output_dir
+                      / label
+                      / (
+                          f"retinex-{downsample}_anchor-{anchor:g}_"
+                          f"strength-{correction_strength:g}_cap-{correction_cap:g}"
+                      )
+                  )
+                  try:
                     run_config = model_config.replace(
                         weights=checkpoint,
                         output_dir=run_dir,
@@ -300,6 +357,8 @@ def main(argv: list[str] | None = None) -> int:
                         hue_anchor=anchor,
                         model_scale_factor=args.model_scale_factor,
                         hybrid_strategy=args.hybrid_strategy,
+                        dl_primary_strength=correction_strength,
+                        dl_primary_max_correction=correction_cap,
                     )
                     outcome.update(
                         {
