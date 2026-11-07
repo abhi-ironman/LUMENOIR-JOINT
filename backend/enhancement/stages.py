@@ -403,7 +403,11 @@ class FusionStage(ImplementedStage):
         if _hybrid_fusion_strategy() == "dl_primary":
             result = fuse_dl_primary(
                 context.rgb_tensor if context.ops is not None else context.rgb,
-                context.classical_tensor if context.ops is not None else context.classical,
+                (
+                    context.classical_tensor
+                    if context.ops is not None
+                    else context.classical
+                ),
                 context.deep_learning_tensor
                 if context.ops is not None
                 else context.deep_learning,
