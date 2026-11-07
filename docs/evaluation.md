@@ -155,3 +155,17 @@ metadata. Training and test records are both discovered for count verification;
 only test samples are evaluated. See
 [`training/kaggle_eval/README.md`](../training/kaggle_eval/README.md) and
 `example_config.json`.
+
+
+## Joint fork comparison protocol
+
+For an A/B comparison, use the same dataset manifest, checkpoint file, model scale factor, execution device, precision, image preprocessing, warm-up count, timed runs and metric dependencies for every configuration. Record the Git commit SHA and the full environment settings with each run.
+
+Recommended sequence:
+
+1. Baseline: `LUMENOIR_RETINEX_DOWNSAMPLE=2`, `LUMENOIR_HUELOCK_SOURCE_ANCHOR=0`.
+2. Retinex factor trial: test downsample factors 1, 2, 3 and 4 with source anchoring disabled.
+3. HueLock anchor trial: keep the selected Retinex factor fixed; compare anchor strength 0 and 0.45.
+4. Combined candidate: run the selected Retinex factor with anchor 0.45.
+
+Use the repository's existing `training.kaggle_eval` runner to create per-image records and aggregate reports. Preserve the original and friend's checkpoint files separately and select them through the explicit `weights` configuration; do not overwrite or rename the only copy of either checkpoint. Do not treat the previous LUMENOIR or friend's reported aggregate means as directly comparable until the same images and metric implementation have been rerun in this fork.
