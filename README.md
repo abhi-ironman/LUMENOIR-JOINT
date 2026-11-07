@@ -10,16 +10,16 @@ desktops.
 
 > **Status: full enhancement pipeline integrated, CPU and accelerator paths.**
 > Upload validation, LumenScan, LumenRetinex, pretrained Zero-DCE++ inference,
-> LumenFuse, EdgeGuard, HueLock, the bounded opt-in Phase Engine, the adaptive
-> adaptive alpha blend with the §5.8 SSIM do-no-harm guard, the dataset pipeline, the evaluation framework, the **Kaggle
+> LumenFuse, EdgeGuard, HueLock, the bounded opt-in Phase Engine, the adaptive alpha blend with the §5.8 SSIM do-no-harm guard, the dataset pipeline, the evaluation framework, the **Kaggle
 > evaluation runner** and the frontend
 > workspace are implemented. **`POST /api/enhance` now returns an enhanced
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
 > the reference and fallback. Classical mode works without a model;
-> deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint. Local datasets are present under
-> `datasets/raw` (LOL-v1, LOL-v2 Real/Synthetic, SICE_Paired and the additional
-> NPE/LIME/MEF/VV folders); ExDark and DICM are not local. No full evaluation
-> has been run.
+> deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint.
+> Train/validation manifests are committed (1,565 train pairs and 391
+> validation pairs); 118 test-leaking candidates were excluded. Dataset image
+> files remain outside Git under `datasets/raw`; ExDark and DICM are not local.
+> No full standardized evaluation has been run.
 
 ---
 
@@ -39,7 +39,7 @@ desktops.
 | EdgeGuard (gain-aware luma + chroma denoising) | **Implemented** (wired into the pipeline) |
 | HueLock (guarded LAB colour-cast correction) | **Implemented** (wired into the pipeline) |
 | LumenFuse (noise-aware Laplacian-pyramid fusion) | **Implemented** (wired into the pipeline) |
-| Full pipeline: scan → Retinex/DL → fuse → denoise → colour → α blend | **Implemented** |
+| Full pipeline: scan → Retinex/DL → fuse → denoise → colour → α blend + SSIM guard | **Implemented** |
 | Adaptive alpha blend, bypass and non-dark SSIM do-no-harm guard (§5.8) | **Implemented** |
 | Device selection (CPU / CUDA / Apple Silicon MPS / auto) | **Implemented** |
 | GPU-first pipeline (scan → Retinex/DL → fuse → denoise → colour → α blend) | **Implemented** (CUDA/MPS tensor path; CPU fallback) |
@@ -50,7 +50,7 @@ desktops.
 | Frontend: upload, methods, comparison, intermediate gallery, downloads | **Implemented** |
 | Evaluation framework (PSNR, SSIM, LPIPS, NIQE, artifact metrics, latency) | **Implemented** (no benchmark run yet) |
 | Kaggle evaluation runner (discovery, four modes, reports, visuals) | **Implemented** (local discovery verified; no full evaluation run) |
-| Dataset preparation pipeline (validation, pHash dedupe, leakage, splits, crops) | **Implemented** (local data present; real splits not generated) |
+| Dataset preparation pipeline (validation, pHash dedupe, leakage, splits, crops) | **Implemented** (train/validation manifests and leakage report committed) |
 | Retinex / CLAHE / denoising / colour correction | **Implemented** |
 | Deep learning architecture, weights, inference | **Implemented** (pretrained Zero-DCE++, wired into the pipeline) |
 | Adaptive fusion, fusion weights, parameter selection | **Implemented** |
