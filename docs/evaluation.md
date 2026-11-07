@@ -1,8 +1,11 @@
 # Evaluation framework
 
-The metrics and the harness are implemented. **No benchmark numbers are
-reported yet**: there is no enhancement algorithm and no run over the real
-datasets. The framework exists so every later step is measured the same way.
+The full enhancement pipeline and the metrics harness are implemented. **No
+standardized benchmark numbers are reported yet** because the paired and
+unpaired research datasets have not been run through the final integration
+branch. A successful local workspace upload is a smoke test, not a dataset
+benchmark; the framework ensures the eventual comparison uses the same images,
+metrics and reporting rules.
 
 Definitions follow `final_decision.md` §6.
 
@@ -129,7 +132,7 @@ Unit tests (default, network-free) mock model construction and verify the lazy
 plumbing:
 
 ```bash
-python -m pytest -q          # 317 tests, 8 integration tests deselected
+python -m pytest -q          # use the latest GitHub Actions run for the exact current count
 ```
 
 Real LPIPS/NIQE tests are marked `integration`, excluded by `pytest.ini`, and
@@ -155,3 +158,17 @@ metadata. Training and test records are both discovered for count verification;
 only test samples are evaluated. See
 [`training/kaggle_eval/README.md`](../training/kaggle_eval/README.md) and
 `example_config.json`.
+
+
+## Joint fork comparison protocol
+
+For an A/B comparison, use the same dataset manifest, checkpoint file, model scale factor, execution device, precision, image preprocessing, warm-up count, timed runs and metric dependencies for every configuration. Record the Git commit SHA and the full environment settings with each run.
+
+Recommended sequence:
+
+1. Baseline: `LUMENOIR_RETINEX_DOWNSAMPLE=2`, `LUMENOIR_HUELOCK_SOURCE_ANCHOR=0`.
+2. Retinex factor trial: test downsample factors 1, 2, 3 and 4 with source anchoring disabled.
+3. HueLock anchor trial: keep the selected Retinex factor fixed; compare anchor strength 0 and 0.45.
+4. Combined candidate: run the selected Retinex factor with anchor 0.45.
+
+Use the repository's existing `training.kaggle_eval` runner to create per-image records and aggregate reports. The currently verified model file is the published pretrained Zero-DCE++ checkpoint. Compare it against the project's own fine-tuned `best.pth` when Colab training is complete. A separate collaborator checkpoint is optional; do not describe the published pretrained weights as a friend's fine-tuned model. Keep both files unchanged and select them explicitly through the checkpoint matrix runner. Do not treat previous LUMENOIR or collaborator-reported aggregate means as directly comparable until the same images and metric implementation have been rerun in this fork.

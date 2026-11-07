@@ -93,7 +93,7 @@ class FineTuner:
         self.log_path = self.output_dir / "train.log"
         self._configure_logging()
 
-        self.train_pairs, self.validation_pairs = load_train_validation_pairs(
+        self.train_pairs, all_validation_pairs = load_train_validation_pairs(
             config.train_manifest,
             config.validation_manifest,
             config.data_root,
@@ -101,15 +101,32 @@ class FineTuner:
         if config.max_train_images is not None:
             self.train_pairs = self.train_pairs[: config.max_train_images]
         if config.max_val_images is not None:
-            self.validation_pairs = self.validation_pairs[: config.max_val_images]
+            self.validation_pairs = all_validation_pairs[: config.max_val_images]
+            self.validation_metric_pairs = [
+                pair for pair in all_validation_pairs if pair.has_reference
+            ][: config.max_val_images]
+        else:
+            self.validation_pairs = all_validation_pairs
+            self.validation_metric_pairs = [
+                pair for pair in all_validation_pairs if pair.has_reference
+            ]
         if not self.train_pairs or not self.validation_pairs:
             raise ValueError("Training and validation splits must both be non-empty.")
+        if not self.validation_metric_pairs:
+            raise ValueError(
+                "Validation needs at least one paired LOL record for PSNR/SSIM/LPIPS; "
+                "single-image records contribute only zero-reference validation loss."
+            )
+        self.validation_zero_reference_pairs = [
+            pair for pair in self.validation_pairs if not pair.has_reference
+        ]
 
         self.train_dataset = PairedDataset(
             self.train_pairs,
             crop_size=config.crop_size,
             train=True,
             seed=config.seed,
+            darkening_probability=config.darkening_probability,
         )
         self.validation_dataset = PairedDataset(
             self.validation_pairs,
@@ -201,11 +218,10 @@ class FineTuner:
         keys = tuple(dict.fromkeys((*self.config.validation_metrics, "new_clipping")))
         self.baseline_rows = evaluate_network(
             self.pretrained_net,
-            self.validation_pairs,
+            self.validation_metric_pairs,
             keys=keys,
             device=self.device,
             amp=self.amp,
-            max_images=self.config.max_val_images,
             stage="pretrained",
         )
         rows = _aggregate_with_means(self.baseline_rows)
@@ -334,20 +350,19 @@ class FineTuner:
     def _validate(self, epoch: int) -> tuple[float, dict[str, float], list[dict[str, Any]]]:
         val_loss = validation_loss(
             self.net,
-            self.validation_pairs,
+            self.validation_zero_reference_pairs or self.validation_pairs,
             weights=self.config.loss,
             device=self.device,
             amp=self.amp,
-            max_images=self.config.max_val_images,
+            max_images=None,
         )
         keys = tuple(dict.fromkeys((*self.config.validation_metrics, "new_clipping")))
         rows = evaluate_network(
             self.net,
-            self.validation_pairs,
+            self.validation_metric_pairs,
             keys=keys,
             device=self.device,
             amp=self.amp,
-            max_images=self.config.max_val_images,
             stage="fine_tuned",
         )
         metrics = {key: _mean_metric(rows, key) for key in keys}
@@ -419,6 +434,12 @@ class FineTuner:
             "stopped_early": stopped_early,
             "train_images": len(self.train_pairs),
             "validation_images": len(self.validation_pairs),
+            "validation_paired_images": len(self.validation_metric_pairs),
+            "validation_zero_reference_images": len(self.validation_zero_reference_pairs),
+            "train_paired_images": sum(pair.has_reference for pair in self.train_pairs),
+            "train_zero_reference_images": sum(
+                not pair.has_reference for pair in self.train_pairs
+            ),
         }
         (self.output_dir / "summary.json").write_text(
             json.dumps(summary, indent=2), encoding="utf-8"
@@ -464,7 +485,11 @@ class FineTuner:
             "# Zero-DCE++ fine-tuning",
             "",
             f"- Train images: {summary['train_images']}",
-            f"- Validation images: {summary['validation_images']}",
+            f"- Validation records: {summary['validation_images']}",
+            f"- Validation paired metric images: {summary['validation_paired_images']}",
+            f"- Validation zero-reference images: {summary['validation_zero_reference_images']}",
+            f"- Training paired inputs: {summary['train_paired_images']}",
+            f"- Training zero-reference inputs: {summary['train_zero_reference_images']}",
             f"- Epochs completed: {summary['epochs_completed']}",
             f"- Best epoch: {summary['best_epoch']}",
             f"- Best validation objective: {summary['best_objective']:.6f}",

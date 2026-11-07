@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+      - integration/**
+  pull_request:
+    branches:
+      - main
+      - integration/**
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install development and evaluation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Install CPU PyTorch for training and tensor tests
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run unit tests
+        run: python -m pytest -q

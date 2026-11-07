@@ -61,8 +61,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 2
 
-    print(f"train records: {len(train)}")
-    print(f"validation records: {len(validation)}")
+    train_paired = sum(pair.has_reference for pair in train)
+    validation_paired = sum(pair.has_reference for pair in validation)
+    print(
+        f"train records: {len(train)} "
+        f"({train_paired} paired, {len(train) - train_paired} zero-reference)"
+    )
+    print(
+        f"validation records: {len(validation)} "
+        f"({validation_paired} paired metric records, "
+        f"{len(validation) - validation_paired} zero-reference records)"
+    )
     print(f"datasets: {sorted({pair.dataset for pair in (*train, *validation)})}")
     print(f"output: {config.output_dir}")
     if args.dry_run:

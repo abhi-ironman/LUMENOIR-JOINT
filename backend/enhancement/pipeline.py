@@ -12,6 +12,7 @@ pool; the Zero-DCE++ ModelManager serialises model inference internally.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Sequence
 from contextlib import nullcontext
@@ -24,6 +25,7 @@ from ..inference.errors import DeviceUnavailableError, InferenceError
 from ..inference.manager import ModelManager
 from ..runtime.config import PipelineRuntime, resolve_runtime
 from ..timing import Stopwatch
+from .phase_engine import PhaseEngine, PhaseEngineConfig, PhaseOverrides
 from .shared import SHARED_STAGES, CachedStage, SharedStageCache
 from .stages import PipelineStage, StageContext, StageNotImplemented, default_stages
 from .types import (
@@ -185,21 +187,59 @@ class EnhancementPipeline:
         mode: EnhancementMode = "hybrid",
         capture_diagnostics: bool = False,
         cache: SharedStageCache | None = None,
+        closed_loop: bool | None = None,
     ) -> PipelineResult:
-        """Run the stages required by ``mode`` and describe the outcome.
+        """Run the selected mode, optionally using the bounded Phase Engine.
 
-        ``capture_diagnostics`` only records additional intermediate images and
-        scalar diagnostics; it does not alter any stage calculation or output.
-
-        ``cache`` reuses mode-independent prefix stages (analysis, classical,
-        deep learning and fusion) already computed for the same image. Create one
-        cache per image; it must never span images.
+        Closed-loop runs are opt-in through closed_loop=True or
+        LUMENOIR_CLOSED_LOOP_ENABLED=true. Every retry starts from the source
+        image and bypasses the shared stage cache because its parameters differ.
         """
         if mode not in ENHANCEMENT_MODES:
             raise ValueError(f"Unsupported enhancement mode: {mode!r}.")
 
         ops = self._execution_ops()
         lock = self._execution_lock if ops is not None else nullcontext()
+        with lock:
+            enabled = closed_loop
+            if enabled is None:
+                enabled = os.getenv(
+                    "LUMENOIR_CLOSED_LOOP_ENABLED", "false"
+                ).strip().lower() in {"1", "true", "yes", "on"}
+
+            if enabled:
+                engine = PhaseEngine(PhaseEngineConfig())
+                return engine.run(
+                    original=image,
+                    run_pass=lambda overrides: self._run_once(
+                        image,
+                        mode=mode,
+                        capture_diagnostics=capture_diagnostics,
+                        cache=None,
+                        ops=ops,
+                        phase_overrides=overrides,
+                    ),
+                )
+
+            return self._run_once(
+                image,
+                mode=mode,
+                capture_diagnostics=capture_diagnostics,
+                cache=cache,
+                ops=ops,
+                phase_overrides=PhaseOverrides(),
+            )
+
+    def _run_once(
+        self,
+        image: Image.Image,
+        *,
+        mode: EnhancementMode,
+        capture_diagnostics: bool,
+        cache: SharedStageCache | None,
+        ops,
+        phase_overrides: PhaseOverrides,
+    ) -> PipelineResult:
         context = StageContext(
             image=image,
             mode=mode,
@@ -208,11 +248,9 @@ class EnhancementPipeline:
             capture_diagnostics=capture_diagnostics,
             runtime=self._runtime,
             ops=ops,
+            phase_overrides=phase_overrides,
         )
-        with lock:
-            return self._run_locked(
-                context, mode=mode, cache=cache, ops=ops
-            )
+        return self._run_locked(context, mode=mode, cache=cache, ops=ops)
 
     def _run_locked(
         self,

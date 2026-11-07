@@ -10,15 +10,28 @@ desktops.
 
 > **Status: full enhancement pipeline integrated, CPU and accelerator paths.**
 > Upload validation, LumenScan, LumenRetinex, pretrained Zero-DCE++ inference,
-> LumenFuse, EdgeGuard, HueLock, the adaptive alpha blend, the dataset pipeline,
-> the evaluation framework, the **Kaggle evaluation runner** and the frontend
+> LumenFuse, EdgeGuard, HueLock, the bounded opt-in Phase Engine, the adaptive alpha blend with the §5.8 SSIM do-no-harm guard, the dataset pipeline, the evaluation framework, the **Kaggle
+> evaluation runner** and the frontend
 > workspace are implemented. **`POST /api/enhance` now returns an enhanced
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
 > the reference and fallback. Classical mode works without a model;
-> deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint. Local datasets are present under
-> `datasets/raw` (LOL-v1, LOL-v2 Real/Synthetic, SICE_Paired and the additional
-> NPE/LIME/MEF/VV folders); ExDark and DICM are not local. No full evaluation
-> has been run.
+> deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint.
+> The committed legacy train/validation manifests contain 1,565/391 LOL
+> records. The full SICE+LOL zero-reference trainer is implemented; generate
+> the main split builder's fine_tune.json and mixed validation.json to use it.
+> The split builder performs the test-leakage audit. Dataset images remain
+> outside Git; ExDark and DICM must be supplied for the complete protocol.
+> No full standardized evaluation has been run.
+
+## Public demo deployment
+
+The integration branch has a deployment guide for publishing the React frontend
+and FastAPI/Zero-DCE++ backend separately without merging into `main`.
+See [docs/deployment.md](docs/deployment.md) for Vercel + Railway setup,
+required environment variables, health checks, verification and licensing
+notes. The root Dockerfile is configured for CPU inference, downloads the
+published checkpoint during image build and verifies its SHA-256; model weights
+remain outside Git.
 
 ---
 
@@ -38,8 +51,8 @@ desktops.
 | EdgeGuard (gain-aware luma + chroma denoising) | **Implemented** (wired into the pipeline) |
 | HueLock (guarded LAB colour-cast correction) | **Implemented** (wired into the pipeline) |
 | LumenFuse (noise-aware Laplacian-pyramid fusion) | **Implemented** (wired into the pipeline) |
-| Full pipeline: scan → Retinex/DL → fuse → denoise → colour → α blend | **Implemented** |
-| Adaptive alpha blend and do-no-harm bypass | **Implemented** |
+| Full pipeline: scan → Retinex/DL → fuse → denoise → colour → α blend + SSIM guard | **Implemented** |
+| Adaptive alpha blend, bypass and non-dark SSIM do-no-harm guard (§5.8) | **Implemented** |
 | Device selection (CPU / CUDA / Apple Silicon MPS / auto) | **Implemented** |
 | GPU-first pipeline (scan → Retinex/DL → fuse → denoise → colour → α blend) | **Implemented** (CUDA/MPS tensor path; CPU fallback) |
 | GPU PSNR/SSIM evaluation | **Implemented** (`LUMENOIR_EVAL_DEVICE`) |
@@ -49,11 +62,12 @@ desktops.
 | Frontend: upload, methods, comparison, intermediate gallery, downloads | **Implemented** |
 | Evaluation framework (PSNR, SSIM, LPIPS, NIQE, artifact metrics, latency) | **Implemented** (no benchmark run yet) |
 | Kaggle evaluation runner (discovery, four modes, reports, visuals) | **Implemented** (local discovery verified; no full evaluation run) |
-| Dataset preparation pipeline (validation, pHash dedupe, leakage, splits, crops) | **Implemented** (local data present; real splits not generated) |
+| Dataset preparation pipeline (validation, pHash dedupe, leakage, splits, crops) | **Implemented** (train/validation manifests and leakage report committed) |
 | Retinex / CLAHE / denoising / colour correction | **Implemented** |
 | Deep learning architecture, weights, inference | **Implemented** (pretrained Zero-DCE++, wired into the pipeline) |
 | Adaptive fusion, fusion weights, parameter selection | **Implemented** |
-| Training notebooks and fine-tuning | **Placeholder** (folder + notes only) |
+| Paired Zero-DCE++ fine-tuning | **Implemented** (`training/finetune`; requires a separate paired train/validation manifest and checkpoint) |
+| Closed-loop Phase Engine (§5.7) | **Implemented** (opt-in; baseline is unchanged unless enabled) |
 
 `POST /api/enhance` returns `200` with a base64 PNG for implemented modes.
 Classical mode works without a model; `deep_learning` and `hybrid` return `503`
@@ -162,6 +176,8 @@ files are git-ignored.
 
 ## Setup and run
 
+For local inference, place the published checkpoint at `backend/weights/zero_dce_plus_plus.pth`; keep it out of Git. The same file is the pretrained baseline for later comparison with the project's separately fine-tuned `best.pth`.
+
 Prerequisites: Python 3.11+ (verified on 3.14), Node 20+ (verified on 22), and
 Git. Two terminals are used for development.
 
@@ -182,7 +198,7 @@ uvicorn backend.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -192,14 +208,18 @@ The dev server proxies `/api/*` to `http://127.0.0.1:8000`, so no API URL needs
 to be configured. To point the UI at a different backend, set
 `VITE_API_BASE_URL` before building.
 
-### 3. Optional: pretrained Zero-DCE++ inference
+### 3. Pretrained Zero-DCE++ inference
 
-The API runs without these; installing them enables NoirNet.
+Install the inference dependencies, provision the published checkpoint, and configure the model. The checkpoint is intentionally git-ignored.
 
 ```bash
 pip install -r requirements-inference.txt   # torch + numpy
-LUMENOIR_MODEL_ID=zero_dce_plus_plus \
-LUMENOIR_INFERENCE_DEVICE=cpu \
+cp .env.example .env
+# In .env set:
+# LUMENOIR_MODEL_ID=zero_dce_plus_plus
+# LUMENOIR_MODEL_WEIGHTS=backend/weights/zero_dce_plus_plus.pth
+# LUMENOIR_DEVICE=auto
+# LUMENOIR_INFERENCE_DEVICE=auto
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -216,7 +236,7 @@ measured timings.
 
 ```bash
 pip install -r requirements-dev.txt        # runtime + eval + test tooling
-.venv/bin/python -m pytest -q              # 317 tests, 8 integration deselected
+.venv/bin/python -m pytest -q              # exact count is shown in the latest CI run
 .venv/bin/python -m ruff check backend tests training
 
 cd frontend && npm run build && npm run lint
@@ -424,18 +444,20 @@ Model load (including the first torch import) took about 1.2 s at startup.
 These decisions belong to research and remain open — nothing here guesses at
 them, not even a temporary version:
 
-- model training, fine-tuning, checkpoint export
-- quality-based output selection across multiple complete runs, the closed-loop
-  proxies and Optuna coefficient tuning
+- large-scale training runs and final checkpoint export (the paired fine-tuning trainer is implemented)
+- cross-checkpoint / cross-configuration quality selection and Optuna coefficient
+  tuning (the bounded per-image Phase Engine is implemented)
 - region-aware enhancement, additional overexposure protection beyond the
   implemented gain/shoulder/original-candidate layers
 - ablation runs, benchmark tables and deployment-target choice
 - actual train/validation/test files (the rules are implemented; they are
   generated only once the datasets are downloaded)
 
-The full enhancement pipeline, all six modules, the alpha blend and the API
-integration are implemented. The closed-loop proxies (§5.7), Optuna tuning
-(§5.6), dataset evaluation and fine-tuning are not.
+The full enhancement pipeline, all six modules, the alpha blend, the API
+integration and the bounded Phase Engine (§5.7) are implemented. The Phase
+Engine is opt-in and retains the lowest-proxy result from at most three passes.
+Optuna tuning (§5.6), real-dataset evaluation and ablations still require
+external datasets and measured runs.
 
 Also intentionally absent: database, authentication, image storage and any
 background queue. The runtime image now installs NumPy and OpenCV because the
@@ -454,3 +476,15 @@ torch at startup.
    SICE, ExDark and the no-reference sets; inspect the generated reports.
 3. Run ablations A–J, then fine-tune NoirNet and re-run every table.
 4. Benchmark latency/memory and choose the deployment platform.
+
+
+## Joint integration experiments
+
+This repository is the user-owned fork of [Chiranthcommits25/Lumenoir](https://github.com/Chiranthcommits25/Lumenoir). The upstream repository is not modified by this project. Its API, React frontend, CPU implementation, CUDA/MPS tensor path, model manager, dataset pipeline and Kaggle evaluation runner are retained.
+
+Two optional research controls are added without changing baseline defaults:
+
+- `LUMENOIR_RETINEX_DOWNSAMPLE=2`: selects the illumination-map downsample divisor for both CPU and tensor/GPU Retinex. Valid values are 1–4. The existing divisor of 2 remains the default; the 0.33× result from the separate LUMENOIR implementation is not assumed to transfer to this LIME-style Retinex.
+- `LUMENOIR_HUELOCK_SOURCE_ANCHOR=0`: enables an optional confidence-weighted source-chroma anchor in HueLock. It is off by default. Test `0.45` as an experimental setting; colourful, dark and noisy source regions receive reduced confidence.
+
+The CPU and tensor paths use the same configuration values. Diagnostics include anchor weight and coverage. The controls must be evaluated on identical checkpoints, image splits, device, precision and metric definitions before any default is changed. See [the joint experiment protocol](docs/joint-integration.md).
