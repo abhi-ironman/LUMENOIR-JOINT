@@ -69,3 +69,10 @@ Model weights are not stored in Git. Keep the original checkpoint files separate
 ## Current verification status
 
 The new CPU/GPU HueLock paths, stage environment wiring and regression tests have been committed to this integration branch. A clean CI run and a paired Kaggle evaluation are required before enabling source anchoring by default or changing the Retinex divisor.
+
+
+## FP32 versus FP16 parity
+
+The optional `training.benchmarks.validate_fp16_parity_gpu` tool runs the full pipeline on the same NVIDIA CUDA device in FP32 and FP16. It enforces CUDA, audits model parameter dtypes, traps CPU stage fallbacks and captures final images before pipeline results are released. It reports MAE, maximum absolute pixel difference, PSNR and SSIM between the two precision outputs, with visual difference panels.
+
+These are *precision-agreement* metrics, not enhancement-quality metrics against ground truth. The tool does not measure latency; use `training.benchmarks.benchmark_full_pipeline_gpu` for performance. The Kaggle notebook provides an optional 10-image check for each supplied checkpoint on LOL-v2 Real.
