@@ -128,7 +128,7 @@ def test_unpaired_sice_is_rejected_from_test_and_do_no_harm_folders(tmp_path) ->
     }
     manifest = _manifest(tmp_path / "train.json", [record], "fine_tune")
 
-    with pytest.raises(ValueError, match="test/do-no-harm path"):
+    with pytest.raises(ValueError, match="test path|do-no-harm path"):
         load_pairs(manifest, expected_split="train", data_root=data_root)
 
     bright = data_root / "sice/do_no_harm/image.png"

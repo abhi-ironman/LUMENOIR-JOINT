@@ -158,7 +158,7 @@ def load_pairs(
         if is_test_path(low, data_root) or (
             high is not None and is_test_path(high, data_root)
         ):
-            raise ValueError(f"{manifest_path}: test/do-no-harm path in {expected_split}: {low}")
+            raise ValueError(f"{manifest_path}: test path or do-no-harm path in {expected_split}: {low}")
 
         if high is not None:
             with Image.open(low) as low_image, Image.open(high) as high_image:

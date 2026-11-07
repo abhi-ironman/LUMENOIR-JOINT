@@ -11,7 +11,8 @@ import torch
 
 from backend.evaluation.aggregate import summarise
 from backend.evaluation.harness import evaluate_arrays
-from training.data_pipeline.preprocessing import load_rgb_float32
+from training.data_pipeline.config import SICE_LONG_EDGE
+from training.data_pipeline.preprocessing import load_rgb_float32, resize_long_edge
 
 from .config import LossWeights
 from .data import PairRecord
@@ -134,6 +135,8 @@ def validation_loss(
     with torch.no_grad():
         for pair in selected:
             low_np = load_rgb_float32(pair.low)
+            if pair.dataset == "sice":
+                low_np = resize_long_edge(low_np, SICE_LONG_EDGE)
             low_tensor = torch.from_numpy(
                 np.ascontiguousarray(low_np.transpose(2, 0, 1))
             ).unsqueeze(0).to(device)
