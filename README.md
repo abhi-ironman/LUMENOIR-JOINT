@@ -53,7 +53,7 @@ desktops.
 | Retinex / CLAHE / denoising / colour correction | **Implemented** |
 | Deep learning architecture, weights, inference | **Implemented** (pretrained Zero-DCE++, wired into the pipeline) |
 | Adaptive fusion, fusion weights, parameter selection | **Implemented** |
-| Training notebooks and fine-tuning | **Placeholder** (folder + notes only) |
+| Paired Zero-DCE++ fine-tuning | **Implemented** (`training/finetune`; requires a separate paired train/validation manifest and checkpoint) |
 
 `POST /api/enhance` returns `200` with a base64 PNG for implemented modes.
 Classical mode works without a model; `deep_learning` and `hybrid` return `503`
