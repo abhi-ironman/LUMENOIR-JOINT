@@ -330,50 +330,55 @@ def main(argv: list[str] | None = None) -> int:
     for label, checkpoint in args.checkpoint:
         for downsample in args.retinex_downsample:
             for anchor in args.hue_anchor:
-              for correction_strength in args.dl_primary_strength:
-                for correction_cap in args.dl_primary_max_correction:
-                  run_label = (
-                      f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
-                      f"/strength-{correction_strength:g}/cap-{correction_cap:g}"
-                  )
-                  run_dir = (
-                      args.output_dir
-                      / label
-                      / (
-                          f"retinex-{downsample}_anchor-{anchor:g}_"
-                          f"strength-{correction_strength:g}_cap-{correction_cap:g}"
-                      )
-                  )
-                  try:
-                    run_config = model_config.replace(
-                        weights=checkpoint,
-                        output_dir=run_dir,
-                        allow_missing_model=False,
-                    )
-                    outcome = _run_one(
-                        run_config,
-                        run_dir,
-                        retinex_downsample=downsample,
-                        hue_anchor=anchor,
-                        model_scale_factor=args.model_scale_factor,
-                        hybrid_strategy=args.hybrid_strategy,
-                        dl_primary_strength=correction_strength,
-                        dl_primary_max_correction=correction_cap,
-                    )
-                    outcome.update(
-                        {
-                            "checkpoint_label": label,
-                            "checkpoint_sha256": _sha256(checkpoint),
-                        }
-                    )
-                    matrix["model_runs"].append(outcome)
-                    print(
-                        f"[{run_label}] records={outcome['record_count']} "
-                        f"failures={outcome['failure_count']} -> {run_dir}"
-                    )
-                except Exception as exc:
-                    matrix["errors"].append({"run": run_label, "error": str(exc)})
-                    print(f"[{run_label}] FAILED: {exc}", file=sys.stderr)
+                for correction_strength in args.dl_primary_strength:
+                    for correction_cap in args.dl_primary_max_correction:
+                        run_label = (
+                            f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
+                            f"/strength-{correction_strength:g}/cap-{correction_cap:g}"
+                        )
+                        run_dir = (
+                            args.output_dir
+                            / label
+                            / (
+                                f"retinex-{downsample}_anchor-{anchor:g}_"
+                                f"strength-{correction_strength:g}_cap-{correction_cap:g}"
+                            )
+                        )
+                        try:
+                            run_config = model_config.replace(
+                                weights=checkpoint,
+                                output_dir=run_dir,
+                                allow_missing_model=False,
+                            )
+                            outcome = _run_one(
+                                run_config,
+                                run_dir,
+                                retinex_downsample=downsample,
+                                hue_anchor=anchor,
+                                model_scale_factor=args.model_scale_factor,
+                                hybrid_strategy=args.hybrid_strategy,
+                                dl_primary_strength=correction_strength,
+                                dl_primary_max_correction=correction_cap,
+                            )
+                            outcome.update(
+                                {
+                                    "checkpoint_label": label,
+                                    "checkpoint_sha256": _sha256(checkpoint),
+                                }
+                            )
+                            matrix["model_runs"].append(outcome)
+                            print(
+                                f"[{run_label}] records={outcome['record_count']} "
+                                f"failures={outcome['failure_count']} -> {run_dir}"
+                            )
+                        except Exception as exc:
+                            matrix["errors"].append(
+                                {"run": run_label, "error": str(exc)}
+                            )
+                            print(
+                                f"[{run_label}] FAILED: {exc}",
+                                file=sys.stderr,
+                            )
 
     matrix["finished_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     report_path = args.output_dir / "matrix_manifest.json"
