@@ -8,9 +8,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Includes FastAPI/OpenCV runtime plus CPU-capable PyTorch inference.
-COPY requirements.txt requirements-inference.txt ./
-RUN pip install --no-cache-dir -r requirements-inference.txt
+# Install the API/runtime stack first from PyPI.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Railway runs this service on CPU. Use the official CPU-only PyTorch wheel
+# index so the image does not pull CUDA/cuDNN packages it cannot use.
+RUN pip install --no-cache-dir torch==2.14.1 \
+    --index-url https://download.pytorch.org/whl/cpu
 
 COPY backend ./backend
 
