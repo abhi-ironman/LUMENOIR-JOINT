@@ -53,6 +53,7 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
         retinex_downsample,
         hue_anchor,
         model_scale_factor,
+        hybrid_strategy,
     ):
         assert config.weights == checkpoint.resolve()
         model_calls.append(
@@ -61,6 +62,7 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
                 "retinex_downsample": retinex_downsample,
                 "hue_anchor": hue_anchor,
                 "model_scale_factor": model_scale_factor,
+                "hybrid_strategy": hybrid_strategy,
                 "modes": config.modes,
             }
         )
@@ -96,6 +98,8 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
             "0",
             "--model-scale-factor",
             "1",
+            "--hybrid-strategy",
+            "dl_primary",
             "--retinex-downsample",
             "2",
             "3",
@@ -117,6 +121,8 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
     assert reference_calls[0].weights is None
     assert len(model_calls) == 4
     assert all(call["modes"] == ("deep_learning", "hybrid") for call in model_calls)
+    assert all(call["hybrid_strategy"] == "dl_primary" for call in model_calls)
+    assert manifest["hybrid_strategy"] == "dl_primary"
     assert manifest["checkpoints"] == [
         {
             "label": "pretrained",
