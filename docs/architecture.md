@@ -15,7 +15,7 @@ research system. Anything not listed as implemented is a placeholder.
 | Stage timing | `backend/timing.py` | `perf_counter` measurements per stage |
 | Pipeline orchestration | `backend/enhancement/pipeline.py` | Ordered stages, per-mode stage sets, timing, failure isolation, optional Phase Engine retries |
 | Phase Engine | `backend/enhancement/phase_engine.py` | §5.7 proxy measurements, first-match corrective actions, at most two retries, lowest-Q result selection |
-| Stage implementations | `backend/enhancement/stages.py` | Thin wrappers over LumenScan, LumenRetinex, Zero-DCE++, LumenFuse, EdgeGuard, HueLock and the alpha blend; CPU arrays or device tensors |
+| Stage implementations | `backend/enhancement/stages.py` | Thin wrappers over LumenScan, LumenRetinex, Zero-DCE++, LumenFuse, EdgeGuard, HueLock, adaptive alpha blend and §5.8 SSIM guard; CPU arrays or device tensors |
 | Pipeline runtime | `backend/runtime/config.py` | Unified `LUMENOIR_DEVICE`/`LUMENOIR_PRECISION` resolution, CPU fallback for `auto`, explicit-device errors |
 | Torch primitives | `backend/runtime/torch_ops.py` | LAB LUT, CLAHE, resize, filters, noise, guided filter, pyramids, colour spaces, bilateral |
 | GPU classical stages | `backend/classical_cv/torch_*.py`, `backend/fusion/lumen_fuse.py` | Tensor implementations of scan, Retinex, EdgeGuard, HueLock and fusion; shared rules/parameters |
@@ -56,7 +56,7 @@ research system. Anything not listed as implemented is a placeholder.
 | `fusion` | LumenFuse | Pixel-wise noise-aware weights, guided refinement, Laplacian-pyramid blend → F; NumPy CPU or torch tensor backend |
 | `denoising` | EdgeGuard | Gain-aware luma guided filter and chroma bilateral filter → F′ |
 | `colour_correction` | HueLock | Guarded LAB cast correction → F″ |
-| `quality_assessment` | Adaptive alpha blend | `out = (1−α)I + αF″`, or the original when α = 0 / bypass; final size/range validation |
+| `quality_assessment` | Adaptive alpha blend | `out = (1−α)I + αF″`; on non-dark input, if SSIM(I,out) < 0.85, reduce α until input-output SSIM is at least 0.90; original on bypass / α = 0; final size/range validation |
 
 The stage classes are orchestration only; algorithm decisions stay in the
 modules. `PendingStage` remains available for custom partial pipelines but is

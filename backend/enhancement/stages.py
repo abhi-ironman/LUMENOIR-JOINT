@@ -8,7 +8,7 @@ Each class is a thin orchestration layer over an existing module:
 - Fusion → LumenFuse
 - Denoising → EdgeGuard
 - Colour correction → HueLock
-- Quality assessment → the adaptive alpha blend with the original image
+- Quality assessment → the adaptive alpha blend with a non-dark SSIM guard
 
 The stage classes contain no algorithm logic of their own. ``PendingStage``
 remains available for custom/partial pipelines, but the default pipeline uses
@@ -28,6 +28,7 @@ from ..classical_cv.edge_guard import denoise as edge_guard_denoise
 from ..classical_cv.hue_lock import HueLockConfig, correct as hue_lock_correct
 from ..classical_cv.retinex import LumenRetinexConfig, enhance as retinex_enhance
 from ..classical_cv.scan import LumenScanResult, scan
+from ..classical_cv.ssim_guard import blend_with_ssim_guard
 from ..fusion.lumen_fuse import fuse as fuse_candidates
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
 from ..inference.manager import ModelManager
@@ -538,7 +539,7 @@ class ColourCorrectionStage(ImplementedStage):
 class QualityAssessmentStage(ImplementedStage):
     name = StageName.QUALITY_ASSESSMENT
     description = (
-        "Adaptive alpha blend with the original image and final output validation."
+        "Adaptive alpha blend, non-dark SSIM protection and final output validation."
     )
     produces = (ArtifactKind.FINAL_OUTPUT,)
 
@@ -551,20 +552,42 @@ class QualityAssessmentStage(ImplementedStage):
         else:
             _require(context.enhanced, "enhanced")
 
-        if context.ops is not None:
-            if context.bypass:
-                alpha = 0.0
-            else:
-                alpha = float(context.scan_result.parameters.output_blend_alpha)
-            if context.capture_diagnostics:
-                context.diagnostics["output_blend_alpha"] = alpha
-            if alpha <= 0.0:
+        alpha = (
+            0.0
+            if context.bypass
+            else float(context.scan_result.parameters.output_blend_alpha)
+        )
+        if context.capture_diagnostics:
+            context.diagnostics["output_blend_alpha"] = alpha
+
+        if context.bypass:
+            if context.ops is not None:
                 final_tensor = context.rgb_tensor
+                context.final_tensor = final_tensor
+                final_image = _to_pil(
+                    context.ops.to_numpy(final_tensor), name="final output"
+                )
             else:
-                final_tensor = (
-                    (1.0 - alpha) * context.rgb_tensor
-                    + alpha * context.enhanced_tensor
-                ).clamp(0.0, 1.0)
+                final_image = context.image.copy()
+            guard_diagnostics: dict[str, object] = {
+                "applied": False,
+                "reason": "bypass_gate",
+                "initial_ssim": None,
+                "final_ssim": None,
+                "alpha_before": 0.0,
+                "alpha_after": 0.0,
+                "trigger_ssim": 0.85,
+                "target_ssim": 0.90,
+            }
+        elif context.ops is not None:
+            final_tensor, guard_diagnostics = blend_with_ssim_guard(
+                context.rgb_tensor,
+                context.enhanced_tensor,
+                alpha=alpha,
+                input_median_luminance=float(context.scan_result.features.p50),
+                ops=context.ops,
+            )
+            final_tensor = final_tensor.to(dtype=context.rgb_tensor.dtype)
             if tuple(final_tensor.shape) != tuple(context.rgb.shape):
                 raise RuntimeError(
                     f"Final blend shape {tuple(final_tensor.shape)} != "
@@ -574,26 +597,24 @@ class QualityAssessmentStage(ImplementedStage):
             final_image = _to_pil(
                 context.ops.to_numpy(final_tensor), name="final output"
             )
-        elif context.bypass:
-            final_image = context.image.copy()
-            if context.capture_diagnostics:
-                context.diagnostics["output_blend_alpha"] = 0.0
         else:
-            alpha = float(context.scan_result.parameters.output_blend_alpha)
-            if context.capture_diagnostics:
-                context.diagnostics["output_blend_alpha"] = alpha
-            if alpha <= 0.0:
-                final_image = context.image.copy()
-            else:
-                blended = (1.0 - alpha) * context.rgb + alpha * context.enhanced
-                blended = np.ascontiguousarray(
-                    np.clip(blended, 0.0, 1.0).astype(np.float32)
+            final_array, guard_diagnostics = blend_with_ssim_guard(
+                context.rgb,
+                context.enhanced,
+                alpha=alpha,
+                input_median_luminance=float(context.scan_result.features.p50),
+            )
+            if final_array.shape != context.rgb.shape:
+                raise RuntimeError(
+                    f"Final blend shape {final_array.shape} != {context.rgb.shape}."
                 )
-                if blended.shape != context.rgb.shape:
-                    raise RuntimeError(
-                        f"Final blend shape {blended.shape} != {context.rgb.shape}."
-                    )
-                final_image = _to_pil(blended, name="final output")
+            final_image = _to_pil(final_array, name="final output")
+
+        if context.capture_diagnostics:
+            context.diagnostics["ssim_guard"] = guard_diagnostics
+            context.diagnostics["effective_output_blend_alpha"] = float(
+                guard_diagnostics["alpha_after"] or 0.0
+            )
 
         if final_image.size != context.original_size:
             final_image.close()
