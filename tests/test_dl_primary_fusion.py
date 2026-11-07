@@ -33,7 +33,7 @@ def test_dl_primary_preserves_dl_exactly_when_no_source_detail_evidence() -> Non
     )
 
     np.testing.assert_array_equal(result.image, deep)
-    assert result.active_fraction if hasattr(result, "active_fraction") else True
+    assert result.as_dict()["active_fraction"] == 0.0
     assert float(result.confidence.max()) == 0.0
 
 
