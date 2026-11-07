@@ -54,6 +54,8 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
         hue_anchor,
         model_scale_factor,
         hybrid_strategy,
+        dl_primary_strength,
+        dl_primary_max_correction,
     ):
         assert config.weights == checkpoint.resolve()
         model_calls.append(
@@ -63,6 +65,8 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
                 "hue_anchor": hue_anchor,
                 "model_scale_factor": model_scale_factor,
                 "hybrid_strategy": hybrid_strategy,
+                "dl_primary_strength": dl_primary_strength,
+                "dl_primary_max_correction": dl_primary_max_correction,
                 "modes": config.modes,
             }
         )
@@ -100,6 +104,9 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
             "1",
             "--hybrid-strategy",
             "dl_primary",
+            "--dl-primary-strength",
+            "0.2",
+            "0.4",
             "--retinex-downsample",
             "2",
             "3",
@@ -119,10 +126,14 @@ def test_matrix_accepts_one_pretrained_checkpoint_and_records_provenance(
     assert len(reference_calls) == 1
     assert reference_calls[0].modes == ("original", "classical")
     assert reference_calls[0].weights is None
-    assert len(model_calls) == 4
+    assert len(model_calls) == 8
     assert all(call["modes"] == ("deep_learning", "hybrid") for call in model_calls)
     assert all(call["hybrid_strategy"] == "dl_primary" for call in model_calls)
+    assert {call["dl_primary_strength"] for call in model_calls} == {0.2, 0.4}
+    assert {call["dl_primary_max_correction"] for call in model_calls} == {0.015}
     assert manifest["hybrid_strategy"] == "dl_primary"
+    assert manifest["dl_primary_strength_values"] == [0.2, 0.4]
+    assert manifest["dl_primary_max_correction_values"] == [0.015]
     assert manifest["checkpoints"] == [
         {
             "label": "pretrained",
