@@ -41,20 +41,24 @@ Record the fork commit SHA, environment variables, checkpoint filename and SHA-2
 3. **HueLock ablation:** chosen Retinex divisor; anchor `0` versus `0.45`.
 4. **Combined candidate:** chosen Retinex divisor plus anchor `0.45`.
 
-Run the existing Kaggle evaluation runner for each configuration. Example (edit dataset roots and checkpoint path for the active environment):
+Use the joint checkpoint-matrix runner to automate the full comparison. It evaluates the Original/Classical reference once, then runs Deep Learning and Hybrid for every checkpoint and parameter combination. It fixes one Zero-DCE++ inference scale across all supplied checkpoints; the default is 1, matching the shared fine-tuning configuration.
 
 ```bash
-export LUMENOIR_RETINEX_DOWNSAMPLE=2
-export LUMENOIR_HUELOCK_SOURCE_ANCHOR=0
-python -m training.kaggle_eval \\
-  --config training/kaggle_eval/example_config.json \\
-  --modes original,classical,deep_learning,hybrid \\
-  --weights /absolute/path/to/checkpoint.pth \\
-  --device cuda \\
-  --output-dir training/reports/joint/baseline
+python -m training.kaggle_eval.compare_checkpoints \
+  --config training/kaggle_eval/example_config.json \
+  --checkpoint friend=/absolute/path/to/friends_checkpoint.pth \
+  --checkpoint abhi=/absolute/path/to/abhi_finetuned_checkpoint.pth \
+  --datasets lol_v1,lol_v2_real,lol_v2_syn \
+  --model-scale-factor 1 \
+  --retinex-downsample 2 3 \
+  --hue-anchor 0 0.45 \
+  --device cuda \
+  --output-dir training/reports/joint-matrix
 ```
 
-Repeat with separate output directories for each matrix row. Use `--device cpu` where CUDA is unavailable. The runner writes per-image CSV/JSONL records, aggregates, failures and visual examples. Compare PSNR, SSIM, LPIPS and CIEDE2000 on paired sets; NIQE, noise, edge/texture, clipping, halo, black-crush and latency diagnostics on the same run.
+The command creates a separate report directory for each checkpoint and parameter setting, plus `matrix_manifest.json` with checkpoint SHA-256 hashes, the selected model scale, commit/configuration details and run errors. Use `--device cpu` when CUDA is unavailable. For a single checkpoint, supply one `--checkpoint` argument. Keep both original checkpoint files unchanged.
+
+The runner writes per-image CSV/JSONL records, aggregates, failures and visual examples. Compare PSNR, SSIM, LPIPS and CIEDE2000 on paired sets; NIQE, noise, edge/texture, clipping, halo, black-crush and latency diagnostics on the same run.
 
 Do not compare against previously reported aggregate means unless the images, preprocessing and metric implementations are confirmed identical. Do not use a test split for tuning and then label the same run as a blind final evaluation.
 
