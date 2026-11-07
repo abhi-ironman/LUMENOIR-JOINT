@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Includes FastAPI/OpenCV runtime plus CPU-capable PyTorch inference.
-COPY requirements-inference.txt ./requirements-inference.txt
+COPY requirements.txt requirements-inference.txt ./
 RUN pip install --no-cache-dir -r requirements-inference.txt
 
 COPY backend ./backend
