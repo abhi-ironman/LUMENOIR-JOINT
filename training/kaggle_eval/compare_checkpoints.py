@@ -32,9 +32,6 @@ from .runner import RunSummary, run_evaluation
 RETINEX_ENV = "LUMENOIR_RETINEX_DOWNSAMPLE"
 HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"
 MODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
-HYBRID_STRATEGY_ENV = "LUMENOIR_HYBRID_STRATEGY"
-DL_PRIMARY_STRENGTH_ENV = "LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH"
-DL_PRIMARY_CAP_ENV = "LUMENOIR_DL_PRIMARY_MAX_CORRECTION"
 DEFAULT_DATASETS = ("lol_v1", "lol_v2_real", "lol_v2_syn")
 
 
@@ -65,12 +62,7 @@ def _sha256(path: Path) -> str:
 
 @contextmanager
 def _pipeline_environment(
-    retinex_downsample: int,
-    hue_anchor: float,
-    model_scale_factor: int = 1,
-    hybrid_strategy: str = "legacy",
-    dl_primary_strength: float = 0.20,
-    dl_primary_max_correction: float = 0.015,
+    retinex_downsample: int, hue_anchor: float, model_scale_factor: int = 1
 ) -> Iterator[None]:
     if not 1 <= retinex_downsample <= 4:
         raise ValueError("Retinex downsample must be in [1, 4].")
@@ -78,28 +70,12 @@ def _pipeline_environment(
         raise ValueError("HueLock source anchor must be in [0, 0.55].")
     if not 1 <= model_scale_factor <= 12:
         raise ValueError("Zero-DCE++ scale factor must be in [1, 12].")
-    if hybrid_strategy not in {"legacy", "dl_primary"}:
-        raise ValueError("hybrid_strategy must be 'legacy' or 'dl_primary'.")
-    if not 0.0 <= dl_primary_strength <= 2.0:
-        raise ValueError("DL-primary correction strength must be in [0, 2].")
-    if not 0.0 <= dl_primary_max_correction <= 0.10:
-        raise ValueError("DL-primary maximum correction must be in [0, 0.10].")
 
-    keys = (
-        RETINEX_ENV,
-        HUE_ANCHOR_ENV,
-        MODEL_SCALE_ENV,
-        HYBRID_STRATEGY_ENV,
-        DL_PRIMARY_STRENGTH_ENV,
-        DL_PRIMARY_CAP_ENV,
-    )
+    keys = (RETINEX_ENV, HUE_ANCHOR_ENV, MODEL_SCALE_ENV)
     previous = {key: os.environ.get(key) for key in keys}
     os.environ[RETINEX_ENV] = str(retinex_downsample)
     os.environ[HUE_ANCHOR_ENV] = f"{hue_anchor:.4f}".rstrip("0").rstrip(".")
     os.environ[MODEL_SCALE_ENV] = str(model_scale_factor)
-    os.environ[HYBRID_STRATEGY_ENV] = hybrid_strategy
-    os.environ[DL_PRIMARY_STRENGTH_ENV] = str(dl_primary_strength)
-    os.environ[DL_PRIMARY_CAP_ENV] = str(dl_primary_max_correction)
     try:
         yield
     finally:
@@ -128,26 +104,13 @@ def _run_one(
     retinex_downsample: int,
     hue_anchor: float,
     model_scale_factor: int,
-    hybrid_strategy: str = "legacy",
-    dl_primary_strength: float = 0.20,
-    dl_primary_max_correction: float = 0.015,
 ) -> dict[str, object]:
-    with _pipeline_environment(
-        retinex_downsample,
-        hue_anchor,
-        model_scale_factor,
-        hybrid_strategy,
-        dl_primary_strength,
-        dl_primary_max_correction,
-    ):
+    with _pipeline_environment(retinex_downsample, hue_anchor, model_scale_factor):
         summary = run_evaluation(config.replace(output_dir=output_dir))
     return {
         "retinex_downsample": retinex_downsample,
         "hue_lock_source_anchor": hue_anchor,
         "model_scale_factor": model_scale_factor,
-        "hybrid_strategy": hybrid_strategy,
-        "dl_primary_correction_strength": dl_primary_strength,
-        "dl_primary_max_correction": dl_primary_max_correction,
         **_summary_dict(summary),
     }
 
@@ -161,48 +124,19 @@ def build_parser() -> argparse.ArgumentParser:
         type=_checkpoint_arg,
         required=True,
         metavar="LABEL=PATH",
-        help=(
-            "Repeat for each checkpoint; each file is SHA-256 recorded "
-            "and left untouched."
-        ),
+        help="Repeat for each checkpoint; each file is SHA-256 recorded and left untouched.",
     )
     parser.add_argument(
         "--datasets",
         default=",".join(DEFAULT_DATASETS),
-        help=(
-            "Comma-separated paired dataset keys "
-            "(default: LOL-v1, LOL-v2 Real, LOL-v2 Synthetic)."
-        ),
+        help="Comma-separated paired dataset keys (default: LOL-v1, LOL-v2 Real, LOL-v2 Synthetic).",
     )
     parser.add_argument("--device", default=None, help="Override configured device.")
-    parser.add_argument(
-        "--hybrid-strategy",
-        choices=("legacy", "dl_primary"),
-        default="legacy",
-        help="Hybrid fusion strategy; legacy remains the default.",
-    )
-    parser.add_argument(
-        "--dl-primary-strength",
-        type=float,
-        nargs="+",
-        default=[0.20],
-        help="DL-primary correction strengths to evaluate (0-2).",
-    )
-    parser.add_argument(
-        "--dl-primary-max-correction",
-        type=float,
-        nargs="+",
-        default=[0.015],
-        help="Maximum absolute luma corrections to evaluate (0-0.10).",
-    )
     parser.add_argument("--latency-warmups", type=int, default=None)
     parser.add_argument("--latency-runs", type=int, default=None)
     parser.add_argument(
         "--model-scale-factor", type=int, default=1,
-        help=(
-            "Use the same Zero-DCE++ inference scale for every checkpoint "
-            "(default 1, matching the fine-tuning config)."
-        ),
+        help="Use the same Zero-DCE++ inference scale for every checkpoint (default 1, matching the fine-tuning config).",
     )
     parser.add_argument(
         "--retinex-downsample",
@@ -250,20 +184,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--retinex-downsample values must be between 1 and 4.")
     if any(not 0.0 <= value <= 0.55 for value in args.hue_anchor):
         parser.error("--hue-anchor values must be between 0 and 0.55.")
-    if any(not 0.0 <= value <= 2.0 for value in args.dl_primary_strength):
-        parser.error("--dl-primary-strength values must be between 0 and 2.")
-    if any(not 0.0 <= value <= 0.10 for value in args.dl_primary_max_correction):
-        parser.error("--dl-primary-max-correction values must be between 0 and 0.10.")
     if len(set(args.retinex_downsample)) != len(args.retinex_downsample):
         parser.error("--retinex-downsample values must be unique.")
     if len(set(args.hue_anchor)) != len(args.hue_anchor):
         parser.error("--hue-anchor values must be unique.")
 
-    datasets = tuple(
-        value.strip()
-        for value in args.datasets.split(",")
-        if value.strip()
-    )
+    datasets = tuple(value.strip() for value in args.datasets.split(",") if value.strip())
     if not datasets:
         parser.error("At least one dataset must be selected.")
     try:
@@ -290,9 +216,6 @@ def main(argv: list[str] | None = None) -> int:
         "selected_datasets": list(datasets),
         "device": base_config.device,
         "model_scale_factor": args.model_scale_factor,
-        "hybrid_strategy": args.hybrid_strategy,
-        "dl_primary_strength_values": args.dl_primary_strength,
-        "dl_primary_max_correction_values": args.dl_primary_max_correction,
         "latency_warmups": base_config.latency_warmups,
         "latency_runs": base_config.latency_runs,
         "retinex_downsample_values": args.retinex_downsample,
@@ -308,77 +231,42 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_reference:
         try:
-            with _pipeline_environment(
-                2,
-                0.0,
-                args.model_scale_factor,
-                args.hybrid_strategy,
-                args.dl_primary_strength[0],
-                args.dl_primary_max_correction[0],
-            ):
+            with _pipeline_environment(2, 0.0, args.model_scale_factor):
                 reference = run_evaluation(base_config)
             matrix["reference_run"] = _summary_dict(reference)
         except Exception as exc:
-            matrix["errors"].append(
-                {
-                    "run": "original-classical-reference",
-                    "error": str(exc),
-                }
-            )
+            matrix["errors"].append({"run": "original-classical-reference", "error": str(exc)})
 
     model_config = base_config.replace(modes=("deep_learning", "hybrid"))
     for label, checkpoint in args.checkpoint:
         for downsample in args.retinex_downsample:
             for anchor in args.hue_anchor:
-                for correction_strength in args.dl_primary_strength:
-                    for correction_cap in args.dl_primary_max_correction:
-                        run_label = (
-                            f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
-                            f"/strength-{correction_strength:g}/cap-{correction_cap:g}"
-                        )
-                        run_dir = (
-                            args.output_dir
-                            / label
-                            / (
-                                f"retinex-{downsample}_anchor-{anchor:g}_"
-                                f"strength-{correction_strength:g}_cap-{correction_cap:g}"
-                            )
-                        )
-                        try:
-                            run_config = model_config.replace(
-                                weights=checkpoint,
-                                output_dir=run_dir,
-                                allow_missing_model=False,
-                            )
-                            outcome = _run_one(
-                                run_config,
-                                run_dir,
-                                retinex_downsample=downsample,
-                                hue_anchor=anchor,
-                                model_scale_factor=args.model_scale_factor,
-                                hybrid_strategy=args.hybrid_strategy,
-                                dl_primary_strength=correction_strength,
-                                dl_primary_max_correction=correction_cap,
-                            )
-                            outcome.update(
-                                {
-                                    "checkpoint_label": label,
-                                    "checkpoint_sha256": _sha256(checkpoint),
-                                }
-                            )
-                            matrix["model_runs"].append(outcome)
-                            print(
-                                f"[{run_label}] records={outcome['record_count']} "
-                                f"failures={outcome['failure_count']} -> {run_dir}"
-                            )
-                        except Exception as exc:
-                            matrix["errors"].append(
-                                {"run": run_label, "error": str(exc)}
-                            )
-                            print(
-                                f"[{run_label}] FAILED: {exc}",
-                                file=sys.stderr,
-                            )
+                run_label = (
+                    f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
+                )
+                run_dir = args.output_dir / label / f"retinex-{downsample}_anchor-{anchor:g}"
+                try:
+                    run_config = model_config.replace(
+                        weights=checkpoint,
+                        output_dir=run_dir,
+                        allow_missing_model=False,
+                    )
+                    outcome = _run_one(
+                        run_config,
+                        run_dir,
+                        retinex_downsample=downsample,
+                        hue_anchor=anchor,
+                        model_scale_factor=args.model_scale_factor,
+                    )
+                    outcome.update({"checkpoint_label": label, "checkpoint_sha256": _sha256(checkpoint)})
+                    matrix["model_runs"].append(outcome)
+                    print(
+                        f"[{run_label}] records={outcome['record_count']} "
+                        f"failures={outcome['failure_count']} -> {run_dir}"
+                    )
+                except Exception as exc:
+                    matrix["errors"].append({"run": run_label, "error": str(exc)})
+                    print(f"[{run_label}] FAILED: {exc}", file=sys.stderr)
 
     matrix["finished_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     report_path = args.output_dir / "matrix_manifest.json"
@@ -388,10 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     if not matrix["model_runs"]:
         return 1
     if matrix["errors"]:
-        print(
-            f"Completed with {len(matrix['errors'])} error(s); "
-            "inspect matrix_manifest.json."
-        )
+        print(f"Completed with {len(matrix['errors'])} error(s); inspect matrix_manifest.json.")
         return 1
     return 0
 
