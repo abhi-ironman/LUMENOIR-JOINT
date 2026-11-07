@@ -30,7 +30,10 @@ from ..classical_cv.retinex import LumenRetinexConfig, enhance as retinex_enhanc
 from ..classical_cv.scan import LumenScanResult, scan
 from ..classical_cv.ssim_guard import blend_with_ssim_guard
 from ..fusion.lumen_fuse import fuse as fuse_candidates
-from ..fusion.dl_primary import fuse_dl_primary
+from ..fusion.dl_primary import (
+    DLPrimaryFusionConfig,
+    fuse_dl_primary,
+)
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
 from ..inference.manager import ModelManager
 from ..runtime.config import PipelineRuntime
@@ -203,6 +206,36 @@ def _hybrid_fusion_strategy() -> str:
             "LUMENOIR_HYBRID_STRATEGY must be 'legacy' or 'dl_primary'."
         )
     return strategy
+
+
+def _dl_primary_config_from_environment() -> DLPrimaryFusionConfig:
+    """Resolve conservative DL-primary correction settings from the environment."""
+    defaults = DLPrimaryFusionConfig()
+    values: dict[str, float] = {}
+    fields = {
+        "LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH": defaults.correction_strength,
+        "LUMENOIR_DL_PRIMARY_MAX_CORRECTION": defaults.max_correction,
+        "LUMENOIR_DL_PRIMARY_EVIDENCE_FLOOR": defaults.evidence_floor,
+        "LUMENOIR_DL_PRIMARY_EVIDENCE_SPAN": defaults.evidence_span,
+        "LUMENOIR_DL_PRIMARY_NOISE_LIMIT": defaults.noise_limit,
+    }
+    for key, fallback in fields.items():
+        raw = os.getenv(key)
+        try:
+            value = fallback if raw is None or not raw.strip() else float(raw)
+        except ValueError as exc:
+            raise ValueError(f"{key} must be a finite number.") from exc
+        if not np.isfinite(value):
+            raise ValueError(f"{key} must be a finite number.")
+        values[key] = value
+
+    return DLPrimaryFusionConfig(
+        correction_strength=values["LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH"],
+        max_correction=values["LUMENOIR_DL_PRIMARY_MAX_CORRECTION"],
+        evidence_floor=values["LUMENOIR_DL_PRIMARY_EVIDENCE_FLOOR"],
+        evidence_span=values["LUMENOIR_DL_PRIMARY_EVIDENCE_SPAN"],
+        noise_limit=values["LUMENOIR_DL_PRIMARY_NOISE_LIMIT"],
+    )
 
 
 def _require(value: object, name: str) -> None:
@@ -413,6 +446,7 @@ class FusionStage(ImplementedStage):
                 else context.deep_learning,
                 noise_map=context.scan_result.noise_map,
                 ops=context.ops,
+                config=_dl_primary_config_from_environment(),
             )
             if context.ops is not None:
                 context.fused_tensor = result.image
