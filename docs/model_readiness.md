@@ -19,6 +19,12 @@ empty. The runner now imports the model package.
 ## Device status
 
 - Local environment: torch 2.15.0, CUDA unavailable, Apple MPS available.
+- User-run local verification on 7 November 2026: `/api/enhance/status` reported
+  `state: ready`, `model_id: zero_dce_plus_plus`, resolved model device `mps`,
+  and `ready: true`. The browser workspace then returned all expected
+  intermediate artifacts and the final output for an uploaded night-street
+  photograph. This confirms a functional local smoke test; it is not a
+  standardized quality benchmark.
 - `cuda` compatibility cannot be executed locally because there is no CUDA
   device. The code path is present in `backend/inference/device.py`:
   `cuda`, `cuda:N`, and `auto` resolve to CUDA when available.

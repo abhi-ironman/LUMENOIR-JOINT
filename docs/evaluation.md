@@ -1,8 +1,11 @@
 # Evaluation framework
 
-The metrics and the harness are implemented. **No benchmark numbers are
-reported yet**: there is no enhancement algorithm and no run over the real
-datasets. The framework exists so every later step is measured the same way.
+The full enhancement pipeline and the metrics harness are implemented. **No
+standardized benchmark numbers are reported yet** because the paired and
+unpaired research datasets have not been run through the final integration
+branch. A successful local workspace upload is a smoke test, not a dataset
+benchmark; the framework ensures the eventual comparison uses the same images,
+metrics and reporting rules.
 
 Definitions follow `final_decision.md` §6.
 
@@ -129,7 +132,7 @@ Unit tests (default, network-free) mock model construction and verify the lazy
 plumbing:
 
 ```bash
-python -m pytest -q          # 317 tests, 8 integration tests deselected
+python -m pytest -q          # use the latest GitHub Actions run for the exact current count
 ```
 
 Real LPIPS/NIQE tests are marked `integration`, excluded by `pytest.ini`, and
@@ -168,4 +171,4 @@ Recommended sequence:
 3. HueLock anchor trial: keep the selected Retinex factor fixed; compare anchor strength 0 and 0.45.
 4. Combined candidate: run the selected Retinex factor with anchor 0.45.
 
-Use the repository's existing `training.kaggle_eval` runner to create per-image records and aggregate reports. Preserve the original and friend's checkpoint files separately and select them through the explicit `weights` configuration; do not overwrite or rename the only copy of either checkpoint. Do not treat the previous LUMENOIR or friend's reported aggregate means as directly comparable until the same images and metric implementation have been rerun in this fork.
+Use the repository's existing `training.kaggle_eval` runner to create per-image records and aggregate reports. The currently verified model file is the published pretrained Zero-DCE++ checkpoint. Compare it against the project's own fine-tuned `best.pth` when Colab training is complete. A separate collaborator checkpoint is optional; do not describe the published pretrained weights as a friend's fine-tuned model. Keep both files unchanged and select them explicitly through the checkpoint matrix runner. Do not treat previous LUMENOIR or collaborator-reported aggregate means as directly comparable until the same images and metric implementation have been rerun in this fork.

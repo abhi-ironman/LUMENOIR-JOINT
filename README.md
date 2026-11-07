@@ -11,7 +11,7 @@ desktops.
 > **Status: full enhancement pipeline integrated, CPU and accelerator paths.**
 > Upload validation, LumenScan, LumenRetinex, pretrained Zero-DCE++ inference,
 > LumenFuse, EdgeGuard, HueLock, the bounded opt-in Phase Engine, the adaptive
-> alpha blend, the dataset pipeline, the evaluation framework, the **Kaggle
+> adaptive alpha blend with the §5.8 SSIM do-no-harm guard, the dataset pipeline, the evaluation framework, the **Kaggle
 > evaluation runner** and the frontend
 > workspace are implemented. **`POST /api/enhance` now returns an enhanced
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
@@ -40,7 +40,7 @@ desktops.
 | HueLock (guarded LAB colour-cast correction) | **Implemented** (wired into the pipeline) |
 | LumenFuse (noise-aware Laplacian-pyramid fusion) | **Implemented** (wired into the pipeline) |
 | Full pipeline: scan → Retinex/DL → fuse → denoise → colour → α blend | **Implemented** |
-| Adaptive alpha blend and do-no-harm bypass | **Implemented** |
+| Adaptive alpha blend, bypass and non-dark SSIM do-no-harm guard (§5.8) | **Implemented** |
 | Device selection (CPU / CUDA / Apple Silicon MPS / auto) | **Implemented** |
 | GPU-first pipeline (scan → Retinex/DL → fuse → denoise → colour → α blend) | **Implemented** (CUDA/MPS tensor path; CPU fallback) |
 | GPU PSNR/SSIM evaluation | **Implemented** (`LUMENOIR_EVAL_DEVICE`) |
@@ -164,6 +164,8 @@ files are git-ignored.
 
 ## Setup and run
 
+For local inference, place the published checkpoint at `backend/weights/zero_dce_plus_plus.pth`; keep it out of Git. The same file is the pretrained baseline for later comparison with the project's separately fine-tuned `best.pth`.
+
 Prerequisites: Python 3.11+ (verified on 3.14), Node 20+ (verified on 22), and
 Git. Two terminals are used for development.
 
@@ -184,7 +186,7 @@ uvicorn backend.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -194,14 +196,18 @@ The dev server proxies `/api/*` to `http://127.0.0.1:8000`, so no API URL needs
 to be configured. To point the UI at a different backend, set
 `VITE_API_BASE_URL` before building.
 
-### 3. Optional: pretrained Zero-DCE++ inference
+### 3. Pretrained Zero-DCE++ inference
 
-The API runs without these; installing them enables NoirNet.
+Install the inference dependencies, provision the published checkpoint, and configure the model. The checkpoint is intentionally git-ignored.
 
 ```bash
 pip install -r requirements-inference.txt   # torch + numpy
-LUMENOIR_MODEL_ID=zero_dce_plus_plus \
-LUMENOIR_INFERENCE_DEVICE=cpu \
+cp .env.example .env
+# In .env set:
+# LUMENOIR_MODEL_ID=zero_dce_plus_plus
+# LUMENOIR_MODEL_WEIGHTS=backend/weights/zero_dce_plus_plus.pth
+# LUMENOIR_DEVICE=auto
+# LUMENOIR_INFERENCE_DEVICE=auto
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -218,7 +224,7 @@ measured timings.
 
 ```bash
 pip install -r requirements-dev.txt        # runtime + eval + test tooling
-.venv/bin/python -m pytest -q              # 317 tests, 8 integration deselected
+.venv/bin/python -m pytest -q              # exact count is shown in the latest CI run
 .venv/bin/python -m ruff check backend tests training
 
 cd frontend && npm run build && npm run lint

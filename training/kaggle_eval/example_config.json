@@ -8,10 +8,15 @@
   ],
   "output_dir": "/kaggle/working/lumenoir-evaluation",
   "selected_datasets": [],
-  "modes": ["original", "classical", "deep_learning", "hybrid"],
+  "modes": [
+    "original",
+    "classical",
+    "deep_learning",
+    "hybrid"
+  ],
   "seed": 42,
   "max_images": null,
-  "weights": "/kaggle/input/zero-dce-plus-plus/Epoch99.pth",
+  "weights": "/kaggle/input/zero-dce-plus-plus/zero_dce_plus_plus.pth",
   "model_id": "zero_dce_plus_plus",
   "device": "auto",
   "save_visuals": true,
@@ -22,9 +27,10 @@
   "skip_metrics": [],
   "allow_missing_model": true,
   "notes": [
-    "Edit roots, pair directories and weights for your Kaggle mounts.",
+    "Attach the published pretrained checkpoint at the configured weights path.",
+    "For pretrained-versus-fine-tuned comparison, attach the separately exported Colab best.pth and use the joint comparison matrix notebook section.",
     "LIME, MEF, NPE/NPE-ex1/NPE-ex2/NPE-ex3 and VV are unpaired datasets.",
-    "Set skip_metrics to ['lpips', 'niqe'] when those dependencies are unavailable."
+    "Set skip_metrics to ['lpips', 'niqe'] when optional metric packages are unavailable."
   ],
   "datasets": {}
 }

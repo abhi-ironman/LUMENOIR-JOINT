@@ -32,7 +32,7 @@ For a valid comparison, hold constant:
 - warm-up and timed-run counts;
 - installed metric packages and metric configuration.
 
-Record the fork commit SHA, environment variables, checkpoint filename and SHA-256, dataset manifest and hardware with every report. Use the same checkpoint path for all variants in a block. To compare the two contributors' checkpoints, run the complete matrix once per checkpoint; do not overwrite the only copy of either checkpoint.
+Record the fork commit SHA, environment variables, checkpoint filename and SHA-256, dataset manifest and hardware with every report. Use the same checkpoint path for all variants in a block. The currently available comparison is the published pretrained Zero-DCE++ checkpoint versus the project's own fine-tuned `best.pth`; a separate collaborator checkpoint is optional, not a prerequisite. Do not overwrite either source file.
 
 ### Recommended configuration matrix
 
@@ -46,8 +46,8 @@ Use the joint checkpoint-matrix runner to automate the full comparison. It evalu
 ```bash
 python -m training.kaggle_eval.compare_checkpoints \
   --config training/kaggle_eval/example_config.json \
-  --checkpoint friend=/absolute/path/to/friends_checkpoint.pth \
-  --checkpoint abhi=/absolute/path/to/abhi_finetuned_checkpoint.pth \
+  --checkpoint pretrained=/absolute/path/to/zero_dce_plus_plus.pth \
+  --checkpoint abhi=/absolute/path/to/best.pth \
   --datasets lol_v1,lol_v2_real,lol_v2_syn \
   --model-scale-factor 1 \
   --retinex-downsample 2 3 \
@@ -56,7 +56,7 @@ python -m training.kaggle_eval.compare_checkpoints \
   --output-dir training/reports/joint-matrix
 ```
 
-The command creates a separate report directory for each checkpoint and parameter setting, plus `matrix_manifest.json` with checkpoint SHA-256 hashes, the selected model scale, commit/configuration details and run errors. Use `--device cpu` when CUDA is unavailable. For a single checkpoint, supply one `--checkpoint` argument. Keep both original checkpoint files unchanged.
+The command creates a separate report directory for each checkpoint and parameter setting, plus `matrix_manifest.json` with checkpoint SHA-256 hashes, the selected model scale, experiment settings and run errors. Archive the exact Git commit SHA alongside the report. Use `--device cpu` when CUDA is unavailable. For a single checkpoint, supply one `--checkpoint` argument. Keep both original checkpoint files unchanged.
 
 The runner writes per-image CSV/JSONL records, aggregates, failures and visual examples. Compare PSNR, SSIM, LPIPS and CIEDE2000 on paired sets; NIQE, noise, edge/texture, clipping, halo, black-crush and latency diagnostics on the same run.
 
@@ -68,7 +68,11 @@ Model weights are not stored in Git. Keep the original checkpoint files separate
 
 ## Current verification status
 
-The new CPU/GPU HueLock paths, stage environment wiring and regression tests have been committed to this integration branch. A clean CI run and a paired Kaggle evaluation are required before enabling source anchoring by default or changing the Retinex divisor.
+The integration branch has passing push and pull-request CI runs, including the Phase Engine, SSIM guard and single-checkpoint comparison regression tests. A local Mac/MPS smoke test on 7 November 2026 confirmed that the model loads as `ready` and that the workspace returns Original, illumination/noise maps, enhancement-strength map, Classical, Deep Learning, Fusion and final-output artifacts. This was a single-image functional check, not a paired benchmark.
+
+The §5.8 SSIM guard is implemented for CPU and tensor execution: on non-dark inputs (`p50 >= 0.25`), if the proposed input/output SSIM falls below `0.85`, the quality stage reduces the blend toward the source until the delivered output reaches at least `0.90`. The regression test checks both code paths.
+
+A paired Kaggle evaluation is still required before promoting Retinex/HueLock settings or Phase Engine retry coefficients as measured optima. The current values remain experimental defaults.
 
 
 ## FP32 versus FP16 parity

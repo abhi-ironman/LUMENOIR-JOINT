@@ -56,8 +56,9 @@ The authors' curve is `x + raw_alpha·(x² − x)`, which equals
 returns both:
 
 - `raw_alpha`: the tanh output used by the official implementation
-- `curve_alpha = -raw_alpha`: the α for the documented curve, ready for
-  `curve_alpha * s` when the DL stage is implemented
+- `curve_alpha = -raw_alpha`: the sign-corrected coefficient retained for
+  diagnostics. `DeepLearningStage` applies LumenScan's selected DL strength by
+  interpolating the model output back toward the source image.
 
 ## Input, output and geometry
 
@@ -66,8 +67,9 @@ returns both:
   padding (replicate for tiny images). The authors' script crops instead and
   discards up to `scale_factor − 1` border pixels; padding keeps the full frame.
 - Output: float32 clipped to `[0,1]`, encoded as RGB at the **exact input size**.
-- No resizing happens inside the model. The future DL stage will use
-  `backend/preprocessing/resize.py` for the application's maximum edge.
+- No resizing happens inside the model. The API currently validates the upload
+  against its maximum inference pixel limit; it does not silently resize the
+  input before inference. Keep test images within that limit.
 
 ## Device selection
 
@@ -142,21 +144,25 @@ python -m pytest -q
 python -m pytest -m integration -o addopts="" tests/test_zero_dce_integration.py
 ```
 
-## Fine-tuning prerequisites (not implemented)
+## Fine-tuning (implemented)
 
-Verified from the official `lowlight_train.py` and `Myloss.py`:
+The repository includes a device-aware Zero-DCE++ fine-tuning package at
+`training/finetune/`. It preserves the inference architecture and exports a
+strict-load-compatible `best.pth` plus a resumable `last_training.pt`.
 
-- Defaults: `scale_factor=1`, `lr=1e-4`, `weight_decay=1e-4`,
-  `grad_clip_norm=0.1`, `num_epochs=100`, `batch_size=8`, `num_workers=4`.
-- Loss terms: `1600·L_TV(alpha) + mean(L_spa(out, in)) + 5·mean(L_color(out)) +
-  10·mean(L_exp(out, 0.6))`.
-- `Myloss.py` hard-codes `.cuda()` and its unused `perception_loss` calls
-  `vgg16(pretrained=True)`; a port must make both device-agnostic and use the
-  modern weights API if the perceptual term is ever used.
-- Fine-tuning also needs a dataloader over the `training/data_pipeline` splits,
-  the §2.6 recipe (Adam 2e-5, ≤30 epochs, early stopping), the additional
-  highlight/chromaticity losses, validation through the metric harness, and
-  checkpoint export with the same key names.
+- The configured LUMENOIR recipe uses Adam at `2e-5`, up to 30 epochs, early
+  stopping, gradient clipping and the documented highlight/chromaticity loss
+  terms.
+- Training and validation manifests are separate; test records are not loaded
+  by the trainer. Path overlap between train and validation aborts the run.
+- The `best.pth` file is the inference artifact. `last_training.pt` is only for
+  resuming training and must not be used as a model checkpoint.
+- See [`training/finetune/README.md`](../training/finetune/README.md) for the
+  Colab/Kaggle setup, dry-run, training, outputs and validation procedure.
+
+The original Zero-DCE++ paper implementation used CUDA-specific helper code
+and an old torchvision weights API; the repository's trainer uses the current
+model implementation and the selected resolved device instead.
 
 ## Limitations
 
