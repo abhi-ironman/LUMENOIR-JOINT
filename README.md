@@ -454,3 +454,15 @@ torch at startup.
    SICE, ExDark and the no-reference sets; inspect the generated reports.
 3. Run ablations A–J, then fine-tune NoirNet and re-run every table.
 4. Benchmark latency/memory and choose the deployment platform.
+
+
+## Joint integration experiments
+
+This repository is the user-owned fork of [Chiranthcommits25/Lumenoir](https://github.com/Chiranthcommits25/Lumenoir). The upstream repository is not modified by this project. Its API, React frontend, CPU implementation, CUDA/MPS tensor path, model manager, dataset pipeline and Kaggle evaluation runner are retained.
+
+Two optional research controls are added without changing baseline defaults:
+
+- `LUMENOIR_RETINEX_DOWNSAMPLE=2`: selects the illumination-map downsample divisor for both CPU and tensor/GPU Retinex. Valid values are 1–4. The existing divisor of 2 remains the default; the 0.33× result from the separate LUMENOIR implementation is not assumed to transfer to this LIME-style Retinex.
+- `LUMENOIR_HUELOCK_SOURCE_ANCHOR=0`: enables an optional confidence-weighted source-chroma anchor in HueLock. It is off by default. Test `0.45` as an experimental setting; colourful, dark and noisy source regions receive reduced confidence.
+
+The CPU and tensor paths use the same configuration values. Diagnostics include anchor weight and coverage. The controls must be evaluated on identical checkpoints, image splits, device, precision and metric definitions before any default is changed. See [the joint experiment protocol](docs/joint-integration.md).
