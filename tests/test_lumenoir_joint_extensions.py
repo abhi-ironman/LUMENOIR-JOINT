@@ -169,3 +169,35 @@ def test_tensor_hue_lock_supports_source_chroma_anchor() -> None:
     assert np.isfinite(output).all()
     assert _lab_distance(source, output) < _lab_distance(source, enhanced)
     assert result.source_anchor_mean_weight > 0.20
+
+
+def test_joint_matrix_environment_is_restored(monkeypatch):
+    from training.kaggle_eval.compare_checkpoints import (
+        HUE_ANCHOR_ENV,
+        RETINEX_ENV,
+        _pipeline_environment,
+    )
+
+    monkeypatch.setenv(RETINEX_ENV, "4")
+    monkeypatch.delenv(HUE_ANCHOR_ENV, raising=False)
+    with _pipeline_environment(3, 0.45):
+        assert __import__("os").environ[RETINEX_ENV] == "3"
+        assert __import__("os").environ[HUE_ANCHOR_ENV] == "0.45"
+    assert __import__("os").environ[RETINEX_ENV] == "4"
+    assert HUE_ANCHOR_ENV not in __import__("os").environ
+
+
+def test_joint_matrix_checkpoint_parser_requires_existing_file(tmp_path):
+    from training.kaggle_eval.compare_checkpoints import _checkpoint_arg
+
+    checkpoint = tmp_path / "model.pth"
+    checkpoint.write_bytes(b"test")
+    label, path = _checkpoint_arg(f"abhi={checkpoint}")
+    assert label == "abhi"
+    assert path == checkpoint.resolve()
+    with pytest.raises(Exception):
+        _checkpoint_arg("invalid-without-equals")
+    with pytest.raises(Exception):
+        _checkpoint_arg(f"bad label={checkpoint}")
+    with pytest.raises(Exception):
+        _checkpoint_arg(f"missing={tmp_path / 'missing.pth'}")
