@@ -161,6 +161,7 @@ Example:
 python -m training.kaggle_eval.compare_checkpoints \
   --config /kaggle/working/eval_config.json \
   --checkpoint pretrained=/kaggle/input/zero-dce-plus-plus/zero_dce_plus_plus.pth \
+  --checkpoint legacy_epoch100=/kaggle/input/legacy-lumenoir/zero_dce_plus_plus_legacy_epoch100.pth \\
   --checkpoint abhi=/kaggle/input/abhi-lumenoir-finetuned/best.pth \
   --datasets lol_v1,lol_v2_real,lol_v2_syn \
   --device cuda \
