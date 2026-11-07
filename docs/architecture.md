@@ -214,3 +214,8 @@ produced.
 - No untuned algorithm defaults beyond the starting coefficients documented in
   `final_decision.md` §4-§5; they live in `LumenScanConfig`, `LumenFuseConfig`
   and the other typed configs.
+
+
+## Optional joint research controls
+
+The user-owned integration branch adds two environment-driven controls in `backend/enhancement/stages.py`. `LUMENOIR_RETINEX_DOWNSAMPLE` is validated as an integer from 1 to 4 and passed into both `retinex.enhance` and `torch_retinex.enhance_tensor`. The baseline default is 2. `LUMENOIR_HUELOCK_SOURCE_ANCHOR` is validated in [0, 0.55] and passed, with the original RGB image, into both CPU and tensor HueLock. Its default is 0, which preserves the previous output path. Source anchor diagnostics are returned by the existing HueLock stage diagnostics when capture is enabled.
