@@ -23,6 +23,16 @@ desktops.
 > outside Git; ExDark and DICM must be supplied for the complete protocol.
 > No full standardized evaluation has been run.
 
+## Public demo deployment
+
+The integration branch has a deployment guide for publishing the React frontend
+and FastAPI/Zero-DCE++ backend separately without merging into `main`.
+See [docs/deployment.md](docs/deployment.md) for Vercel + Railway setup,
+required environment variables, health checks, verification and licensing
+notes. The root Dockerfile is configured for CPU inference, downloads the
+published checkpoint during image build and verifies its SHA-256; model weights
+remain outside Git.
+
 ---
 
 ## Implemented vs. placeholder
