@@ -82,36 +82,6 @@ gpu = fuse(
 `normalize_weights` are testable helpers.
 
 ## Backends
-## Experimental DL-primary hybrid
-
-The original LumenFuse remains the default. The optional
-`LUMENOIR_HYBRID_STRATEGY=dl_primary` path starts from the Zero-DCE++ candidate
-and transfers only a bounded high-frequency luminance residual from the
-classical candidate. It uses three evidence terms: classical detail must be
-closer to the observed source detail than the DL detail, the source must contain
-measurable local detail, and the LumenScan local-noise estimate must be below
-the configured limit. The correction is bounded before being converted to a
-small RGB scale, so the DL candidate remains the base image.
-
-This is an experimental heuristic, not a measured quality improvement. It is
-disabled by default and does not replace the legacy LumenFuse implementation.
-The evaluation matrix can select it explicitly:
-
-```bash
-python -m training.kaggle_eval.compare_checkpoints \
-  --config /path/to/eval_config.json \
-  --checkpoint finetuned=/path/to/best.pth \
-  --datasets lol_v2_real,lol_v2_syn \
-  --hybrid-strategy dl_primary \
-  --retinex-downsample 2 --hue-anchor 0 \
-  --device cuda \
-  --output-dir /path/to/dl-primary-evaluation
-```
-
-Use a validation split to assess this strategy before any blind test. Do not
-change the default to `dl_primary` unless the same held-out images and metric
-configuration show a repeatable benefit over standalone deep learning.
-
 
 `backend/fusion/lumen_fuse.py` owns the algorithm: candidate validation, the
 four weight factors, highlight protection, normalization, guided refinement,
