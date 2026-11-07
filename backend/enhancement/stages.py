@@ -30,6 +30,7 @@ from ..classical_cv.retinex import LumenRetinexConfig, enhance as retinex_enhanc
 from ..classical_cv.scan import LumenScanResult, scan
 from ..classical_cv.ssim_guard import blend_with_ssim_guard
 from ..fusion.lumen_fuse import fuse as fuse_candidates
+from ..fusion.dl_primary import fuse_dl_primary
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
 from ..inference.manager import ModelManager
 from ..runtime.config import PipelineRuntime
@@ -192,6 +193,16 @@ def _hue_lock_config_from_environment() -> HueLockConfig:
     if not np.isfinite(strength) or not 0.0 <= strength <= 0.55:
         raise ValueError("LUMENOIR_HUELOCK_SOURCE_ANCHOR must be between 0 and 0.55.")
     return HueLockConfig(source_anchor_strength=strength)
+
+
+def _hybrid_fusion_strategy() -> str:
+    """Select legacy LumenFuse or the opt-in DL-primary correction."""
+    strategy = os.getenv("LUMENOIR_HYBRID_STRATEGY", "legacy").strip().lower()
+    if strategy not in {"legacy", "dl_primary"}:
+        raise ValueError(
+            "LUMENOIR_HYBRID_STRATEGY must be 'legacy' or 'dl_primary'."
+        )
+    return strategy
 
 
 def _require(value: object, name: str) -> None:
@@ -387,6 +398,40 @@ class FusionStage(ImplementedStage):
             if context.ops is not None:
                 context.fused_tensor = context.rgb_tensor
                 context.enhanced_tensor = context.rgb_tensor
+            return context
+
+        if _hybrid_fusion_strategy() == "dl_primary":
+            result = fuse_dl_primary(
+                context.rgb_tensor if context.ops is not None else context.rgb,
+                context.classical_tensor if context.ops is not None else context.classical,
+                context.deep_learning_tensor
+                if context.ops is not None
+                else context.deep_learning,
+                noise_map=context.scan_result.noise_map,
+                ops=context.ops,
+            )
+            if context.ops is not None:
+                context.fused_tensor = result.image
+                context.enhanced_tensor = result.image
+                array = context.ops.to_numpy(result.image)
+                strength = context.ops.to_numpy(result.confidence)
+            else:
+                context.fused = result.image
+                context.enhanced = result.image
+                array = result.image
+                strength = result.confidence
+
+            if context.capture_diagnostics:
+                context.diagnostics["fusion"] = result.as_dict()
+            context.publish(ArtifactKind.FUSION_OUTPUT, _to_pil(array))
+            context.publish(
+                ArtifactKind.ENHANCEMENT_STRENGTH_MAP,
+                _map_to_pil(
+                    strength,
+                    vmax=1.0,
+                    name="DL-primary correction confidence",
+                ),
+            )
             return context
 
         if context.ops is not None:
