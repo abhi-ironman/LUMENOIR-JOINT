@@ -58,7 +58,7 @@ def _mean(value) -> float:
     if hasattr(value, "detach"):
         tensor = value.detach()
         if not tensor.is_floating_point():
-            tensor = tensor.to(dtype=tensor.new_empty(()).float().dtype)
+            tensor = tensor.float()
         return float(tensor.mean().item())
     return float(np.mean(value))
 
@@ -160,11 +160,23 @@ def fuse_dl_primary(
         dl = ops.ensure(deep_learning)
         local_noise = ops.ensure(noise_map)
         torch = ops._torch
-        if not bool(torch.isfinite(source).all()) or not bool(torch.isfinite(cv).all()) or not bool(torch.isfinite(dl).all()):
+        if (
+            not bool(torch.isfinite(source).all())
+            or not bool(torch.isfinite(cv).all())
+            or not bool(torch.isfinite(dl).all())
+        ):
             raise ValueError("Fusion candidates contain NaN or infinite values.")
-        if not bool(torch.isfinite(local_noise).all()) or bool((local_noise < 0.0).any()):
+        if (
+            not bool(torch.isfinite(local_noise).all())
+            or bool((local_noise < 0.0).any())
+        ):
             raise ValueError("noise_map must contain finite non-negative values.")
-        for name, candidate in (("original", source), ("classical", cv), ("deep_learning", dl)):
+        candidates = (
+            ("original", source),
+            ("classical", cv),
+            ("deep_learning", dl),
+        )
+        for name, candidate in candidates:
             if bool((candidate < 0.0).any()) or bool((candidate > 1.0).any()):
                 raise ValueError(f"{name} must lie in [0, 1].")
 
