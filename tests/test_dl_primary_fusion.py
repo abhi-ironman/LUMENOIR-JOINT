@@ -49,7 +49,10 @@ def test_dl_primary_uses_classical_detail_only_when_source_supports_it() -> None
     assert result.image.max() <= 1.0
     assert float(result.confidence.mean()) > 0.0
     assert not np.array_equal(result.image, deep)
-    assert np.max(np.abs(result.correction)) <= DLPrimaryFusionConfig().max_correction + 1e-7
+    assert (
+        np.max(np.abs(result.correction))
+        <= DLPrimaryFusionConfig().max_correction + 1e-7
+    )
 
 
 def test_dl_primary_disables_correction_in_high_noise_regions() -> None:
@@ -92,3 +95,16 @@ def test_dl_primary_torch_cpu_matches_numpy_backend() -> None:
     ).image
 
     np.testing.assert_allclose(actual.detach().numpy(), expected, atol=2e-6, rtol=1e-6)
+
+def test_fusion_strategy_defaults_to_legacy_and_accepts_dl_primary(monkeypatch) -> None:
+    from backend.enhancement.stages import _hybrid_fusion_strategy
+
+    monkeypatch.delenv("LUMENOIR_HYBRID_STRATEGY", raising=False)
+    assert _hybrid_fusion_strategy() == "legacy"
+
+    monkeypatch.setenv("LUMENOIR_HYBRID_STRATEGY", "dl_primary")
+    assert _hybrid_fusion_strategy() == "dl_primary"
+
+    monkeypatch.setenv("LUMENOIR_HYBRID_STRATEGY", "unknown")
+    with pytest.raises(ValueError, match="LUMENOIR_HYBRID_STRATEGY"):
+        _hybrid_fusion_strategy()
