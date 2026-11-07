@@ -75,6 +75,69 @@ It was **not** included in the LOL-v1/LOL-v2 comparison matrices above. We there
 
 The inspected upstream `Chiranthcommits25/Lumenoir` README documents the published pretrained Zero-DCE++ model and a training placeholder. No distinct friend-trained checkpoint was supplied for a matched evaluation. The published pretrained checkpoint in the tables is a baseline for the upstream project, not evidence about an additional private friend-trained model.
 
+
+## Historical LUMENOIR results supplied after the joint evaluation
+
+A second archive supplied on 7 November contains older results from the previous
+LUMENOIR implementation. These results are useful historical evidence and
+should not be conflated with the current LUMENOIR-JOINT pipeline.
+
+### Previous LUMENOIR — LOL-v1 (15 images)
+
+| Mode | PSNR ↑ | SSIM ↑ | LPIPS ↓ | NIQE ↓ | Delta E 00 ↓ |
+|---|---:|---:|---:|---:|---:|
+| Classical | 16.9764 | 0.7195 | 0.2632 | 5.8613 | 14.5029 |
+| Deep Learning | 15.9771 | 0.7097 | 0.2880 | 5.9720 | 16.8721 |
+| **Hybrid** | **17.8233** | **0.7467** | **0.2496** | 5.8870 | **13.2399** |
+
+On this small set, the old Hybrid has the best mean PSNR, SSIM, LPIPS and
+Delta E 00. Classical has a slightly lower (better) mean NIQE.
+
+### Previous LUMENOIR — LOL-v2 Real (100 images)
+
+| Mode | PSNR ↑ | SSIM ↑ | LPIPS ↓ | NIQE ↓ | Delta E 00 ↓ |
+|---|---:|---:|---:|---:|---:|
+| Classical | **19.3826** | 0.7444 | 0.2795 | 6.3304 | **12.2596** |
+| Deep Learning | 14.2615 | 0.6820 | 0.3196 | 6.4104 | 21.3940 |
+| **Hybrid** | 19.2160 | **0.7638** | **0.2612** | **6.3068** | 12.2876 |
+
+The previous Hybrid is better than the previous Deep Learning mode on all five
+aggregate metrics. Against previous Classical, it has higher SSIM and better
+LPIPS/NIQE, while Classical is slightly ahead on PSNR and Delta E 00. Per-image
+counts also favour the previous Hybrid over previous Deep Learning on 81/100
+images for PSNR, 77/100 for SSIM, 88/100 for LPIPS, 66/100 for NIQE and 80/100
+for Delta E 00.
+
+### Relationship to the current joint evaluation
+
+The 100 LOL-v2 Real filenames in the historical archive match the current
+LUMENOIR-JOINT LOL-v2 Real manifest exactly (00690.png through 00789.png).
+This makes the historical report especially useful: it suggests that the
+previous LUMENOIR hybrid implementation/settings were materially stronger on
+this named test set than the current joint Hybrid result.
+
+It is **not** a controlled cross-version A/B result. The historical archive
+does not include the source commit, checkpoint SHA-256, image/reference hashes
+or complete metric/preprocessing configuration. Its CSVs show a classical
+fusion base weight of 0.4 and DL strength scale 0.75; the final profile archive
+also records Retinex illumination scale 0.33. The current joint comparison uses
+a different integration pipeline/configuration and records checkpoint hashes.
+The older neural checkpoint is not included in the archive.
+
+Therefore, retain this as historical evidence of a stronger previous LUMENOIR
+hybrid, and as a signal that the joint port/configuration may have regressed.
+Do not merge the two sets of numbers into one leaderboard or claim they are
+fully comparable until the old checkpoint and exact implementation/config are
+recovered and re-evaluated under one harness.
+
+### Friend output in the historical archive
+
+The archive includes one side-by-side night-scene output from the friend's
+model, alongside previous LUMENOIR Classical, Deep Learning and Hybrid images.
+This is a single visual example without a ground-truth reference or paired
+metric evaluation. It can support a qualitative demonstration only; it cannot
+establish that either system is objectively better than the other.
+
 ## Final limitations and recommendation
 
 - No full SICE + LOL fine-tuning run.
