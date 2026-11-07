@@ -32,6 +32,7 @@ from .runner import RunSummary, run_evaluation
 RETINEX_ENV = "LUMENOIR_RETINEX_DOWNSAMPLE"
 HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"
 MODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
+HYBRID_STRATEGY_ENV = "LUMENOIR_HYBRID_STRATEGY"
 DEFAULT_DATASETS = ("lol_v1", "lol_v2_real", "lol_v2_syn")
 
 
@@ -62,7 +63,10 @@ def _sha256(path: Path) -> str:
 
 @contextmanager
 def _pipeline_environment(
-    retinex_downsample: int, hue_anchor: float, model_scale_factor: int = 1
+    retinex_downsample: int,
+    hue_anchor: float,
+    model_scale_factor: int = 1,
+    hybrid_strategy: str = "legacy",
 ) -> Iterator[None]:
     if not 1 <= retinex_downsample <= 4:
         raise ValueError("Retinex downsample must be in [1, 4].")
@@ -70,12 +74,15 @@ def _pipeline_environment(
         raise ValueError("HueLock source anchor must be in [0, 0.55].")
     if not 1 <= model_scale_factor <= 12:
         raise ValueError("Zero-DCE++ scale factor must be in [1, 12].")
+    if hybrid_strategy not in {"legacy", "dl_primary"}:
+        raise ValueError("hybrid_strategy must be 'legacy' or 'dl_primary'.")
 
-    keys = (RETINEX_ENV, HUE_ANCHOR_ENV, MODEL_SCALE_ENV)
+    keys = (RETINEX_ENV, HUE_ANCHOR_ENV, MODEL_SCALE_ENV, HYBRID_STRATEGY_ENV)
     previous = {key: os.environ.get(key) for key in keys}
     os.environ[RETINEX_ENV] = str(retinex_downsample)
     os.environ[HUE_ANCHOR_ENV] = f"{hue_anchor:.4f}".rstrip("0").rstrip(".")
     os.environ[MODEL_SCALE_ENV] = str(model_scale_factor)
+    os.environ[HYBRID_STRATEGY_ENV] = hybrid_strategy
     try:
         yield
     finally:
@@ -104,13 +111,17 @@ def _run_one(
     retinex_downsample: int,
     hue_anchor: float,
     model_scale_factor: int,
+    hybrid_strategy: str = "legacy",
 ) -> dict[str, object]:
-    with _pipeline_environment(retinex_downsample, hue_anchor, model_scale_factor):
+    with _pipeline_environment(
+        retinex_downsample, hue_anchor, model_scale_factor, hybrid_strategy
+    ):
         summary = run_evaluation(config.replace(output_dir=output_dir))
     return {
         "retinex_downsample": retinex_downsample,
         "hue_lock_source_anchor": hue_anchor,
         "model_scale_factor": model_scale_factor,
+        "hybrid_strategy": hybrid_strategy,
         **_summary_dict(summary),
     }
 
@@ -132,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated paired dataset keys (default: LOL-v1, LOL-v2 Real, LOL-v2 Synthetic).",
     )
     parser.add_argument("--device", default=None, help="Override configured device.")
+    parser.add_argument(
+        "--hybrid-strategy",
+        choices=("legacy", "dl_primary"),
+        default="legacy",
+        help="Hybrid fusion strategy; legacy remains the default.",
+    )
     parser.add_argument("--latency-warmups", type=int, default=None)
     parser.add_argument("--latency-runs", type=int, default=None)
     parser.add_argument(
@@ -216,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         "selected_datasets": list(datasets),
         "device": base_config.device,
         "model_scale_factor": args.model_scale_factor,
+        "hybrid_strategy": args.hybrid_strategy,
         "latency_warmups": base_config.latency_warmups,
         "latency_runs": base_config.latency_runs,
         "retinex_downsample_values": args.retinex_downsample,
@@ -231,7 +249,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_reference:
         try:
-            with _pipeline_environment(2, 0.0, args.model_scale_factor):
+            with _pipeline_environment(
+                2, 0.0, args.model_scale_factor, args.hybrid_strategy
+            ):
                 reference = run_evaluation(base_config)
             matrix["reference_run"] = _summary_dict(reference)
         except Exception as exc:
@@ -257,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
                         retinex_downsample=downsample,
                         hue_anchor=anchor,
                         model_scale_factor=args.model_scale_factor,
+                        hybrid_strategy=args.hybrid_strategy,
                     )
                     outcome.update({"checkpoint_label": label, "checkpoint_sha256": _sha256(checkpoint)})
                     matrix["model_runs"].append(outcome)
