@@ -159,3 +159,26 @@ stopping and the documented loss terms. See [`finetune/README.md`](finetune/READ
 Training is zero-reference on the low-light paired inputs; ground truth is used
 only for validation PSNR/SSIM/LPIPS and checkpoint selection. No training is
 started by the test suite.
+
+## FP32 vs FP16 parity validation
+
+`training.benchmarks.validate_fp16_parity_gpu` runs the same images through the
+full pipeline in float32 and in float16 on one CUDA device and compares the
+final images for all three modes: MAE, maximum absolute difference, PSNR and
+SSIM, per image and aggregated, plus an `input | float32 | float16 | |diff| x8`
+panel per image. It measures agreement between precisions, not enhancement
+quality, and does not time anything.
+
+```bash
+python -m training.benchmarks.validate_fp16_parity_gpu \
+  --device cuda \
+  --images /kaggle/input/datasets/chiranth25x/lumenoir-low-light-datasets --count 10 \
+  --output-dir /kaggle/working/fp16_parity
+```
+
+It writes `fp32_vs_fp16_parity.json`, `fp32_vs_fp16_parity.md` and
+`panels/<mode>/`. A report is only meaningful when the execution checks show
+zero CPU stage calls and the audited parameter dtypes are `torch.float32` for
+the reference run and `torch.float16` for the candidate.
+
+This parity validator compares FP32 and FP16 numerical agreement, not enhancement quality. It requires an NVIDIA CUDA device and never silently falls back to CPU. It does not measure latency; use the full-pipeline benchmark for timing.
