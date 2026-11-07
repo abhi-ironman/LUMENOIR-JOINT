@@ -30,7 +30,7 @@ from .config import EvalConfig
 from .runner import RunSummary, run_evaluation
 
 RETINEX_ENV = "LUMENOIR_RETINEX_DOWNSAMPLE"
-HUE_ANCHOR_ENV = "LUMINOIR_HUELOCK_SOURCE_ANCHOR"
+HUE_ANCHOR_ENV = "LUMENOIR_HUELOCK_SOURCE_ANCHOR"\nMODEL_SCALE_ENV = "LUMENOIR_ZERODCE_SCALE_FACTOR"
 DEFAULT_DATASETS = ("lol_v1", "lol_v2_real", "lol_v2_syn")
 
 
@@ -60,16 +60,19 @@ def _sha256(path: Path) -> str:
 
 
 @contextmanager
-def _pipeline_environment(retinex_downsample: int, hue_anchor: float) -> Iterator[None]:
+def _pipeline_environment(\n    retinex_downsample: int, hue_anchor: float, model_scale_factor: int = 1\n) -> Iterator[None]:
     if not 1 <= retinex_downsample <= 4:
         raise ValueError("Retinex downsample must be in [1, 4].")
     if not 0.0 <= hue_anchor <= 0.55:
         raise ValueError("HueLock source anchor must be in [0, 0.55].")
+    if not 1 <= model_scale_factor <= 12:
+        raise ValueError("Zero-DCE++ scale factor must be in [1, 12].")
 
-    keys = (RETINEX_ENV, HUE_ANCHOR_ENV)
+    keys = (RETINEX_ENV, HUE_ANCHOR_ENV, MODEL_SCALE_ENV)
     previous = {key: os.environ.get(key) for key in keys}
     os.environ[RETINEX_ENV] = str(retinex_downsample)
     os.environ[HUE_ANCHOR_ENV] = f"{hue_anchor:.4f}".rstrip("0").rstrip(".")
+    os.environ[MODEL_SCALE_ENV] = str(model_scale_factor)
     try:
         yield
     finally:
@@ -97,12 +100,14 @@ def _run_one(
     *,
     retinex_downsample: int,
     hue_anchor: float,
+    model_scale_factor: int,
 ) -> dict[str, object]:
-    with _pipeline_environment(retinex_downsample, hue_anchor):
+    with _pipeline_environment(retinex_downsample, hue_anchor, model_scale_factor):
         summary = run_evaluation(config.replace(output_dir=output_dir))
     return {
         "retinex_downsample": retinex_downsample,
         "hue_lock_source_anchor": hue_anchor,
+        "model_scale_factor": model_scale_factor,
         **_summary_dict(summary),
     }
 
@@ -126,6 +131,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default=None, help="Override configured device.")
     parser.add_argument("--latency-warmups", type=int, default=None)
     parser.add_argument("--latency-runs", type=int, default=None)
+    parser.add_argument(
+        "--model-scale-factor", type=int, default=1,
+        help="Use the same Zero-DCE++ inference scale for every checkpoint (default 1, matching the fine-tuning config).",
+    )
     parser.add_argument(
         "--retinex-downsample",
         type=int,
@@ -162,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Could not load evaluation config: {exc}")
 
+    if not 1 <= args.model_scale_factor <= 12:
+        parser.error("--model-scale-factor must be between 1 and 12.")
     if len({label for label, _ in args.checkpoint}) != len(args.checkpoint):
         parser.error("Checkpoint labels must be unique.")
     if len({path for _, path in args.checkpoint}) != len(args.checkpoint):
@@ -201,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         "config_file": str(args.config.resolve()),
         "selected_datasets": list(datasets),
         "device": base_config.device,
+        "model_scale_factor": args.model_scale_factor,
         "latency_warmups": base_config.latency_warmups,
         "latency_runs": base_config.latency_runs,
         "retinex_downsample_values": args.retinex_downsample,
@@ -216,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_reference:
         try:
-            with _pipeline_environment(2, 0.0):
+            with _pipeline_environment(2, 0.0, args.model_scale_factor):
                 reference = run_evaluation(base_config)
             matrix["reference_run"] = _summary_dict(reference)
         except Exception as exc:
@@ -241,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                         run_dir,
                         retinex_downsample=downsample,
                         hue_anchor=anchor,
+                        model_scale_factor=args.model_scale_factor,
                     )
                     outcome.update({"checkpoint_label": label, "checkpoint_sha256": _sha256(checkpoint)})
                     matrix["model_runs"].append(outcome)
