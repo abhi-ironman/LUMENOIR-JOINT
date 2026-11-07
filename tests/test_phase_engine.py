@@ -45,6 +45,18 @@ def test_proxy_metrics_are_zero_for_a_neutral_flat_output() -> None:
     assert metrics.proxy_score == pytest.approx(0.0, abs=0.02)
 
 
+def test_new_clipping_counts_pixels_not_clipped_in_the_source() -> None:
+    source = np.zeros((10, 10, 3), dtype=np.float32)
+    output = np.zeros_like(source)
+    source.reshape(-1, 3)[:20] = 1.0
+    output.reshape(-1, 3)[20:40] = 1.0
+
+    metrics = measure_phase_metrics(source, output)
+
+    # Equal input/output clipped percentages do not imply zero newly clipped pixels.
+    assert metrics.new_clipped_fraction == pytest.approx(0.20)
+
+
 def test_clipping_rule_has_priority_and_best_pass_is_returned() -> None:
     source = np.full((64, 64, 3), 0.20, dtype=np.float32)
     clipped = np.ones_like(source)

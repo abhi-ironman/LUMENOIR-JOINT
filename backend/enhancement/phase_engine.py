@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, replace
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 import cv2
 import numpy as np
@@ -139,9 +139,9 @@ def measure_phase_metrics(
             f"Source shape {source_rgb.shape} must match output {output_rgb.shape}."
         )
 
-    source_clip = float((source_rgb.max(axis=2) >= 0.98).mean())
-    output_clip = float((output_rgb.max(axis=2) >= 0.98).mean())
-    new_clip = max(0.0, output_clip - source_clip)
+    source_clipped = source_rgb.max(axis=2) >= 0.98
+    output_clipped = output_rgb.max(axis=2) >= 0.98
+    new_clip = float(np.logical_and(output_clipped, ~source_clipped).mean())
     output_luma = luminance(output_rgb)
     median = float(np.median(output_luma))
     sigma = noise_sigma(output_luma)
