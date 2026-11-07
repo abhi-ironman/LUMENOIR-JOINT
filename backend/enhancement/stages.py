@@ -25,8 +25,8 @@ import numpy as np
 from PIL import Image
 
 from ..classical_cv.edge_guard import denoise as edge_guard_denoise
-from ..classical_cv.hue_lock import correct as hue_lock_correct
-from ..classical_cv.retinex import enhance as retinex_enhance
+from ..classical_cv.hue_lock import HueLockConfig, correct as hue_lock_correct
+from ..classical_cv.retinex import LumenRetinexConfig, enhance as retinex_enhance
 from ..classical_cv.scan import LumenScanResult, scan
 from ..fusion.lumen_fuse import fuse as fuse_candidates
 from ..inference.errors import InferenceFailedError, ModelNotAvailableError
@@ -156,6 +156,34 @@ def _map_to_pil(array: np.ndarray, *, vmax: float, name: str) -> Image.Image:
     return Image.fromarray(np.round(encoded * 255.0).astype(np.uint8))
 
 
+def _retinex_config_from_environment() -> LumenRetinexConfig:
+    """Resolve the same illumination downsample factor for CPU and GPU."""
+    raw = os.getenv("LUMENOIR_RETINEX_DOWNSAMPLE", "2").strip()
+    try:
+        downsample = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "LUMENOIR_RETINEX_DOWNSAMPLE must be an integer from 1 to 4."
+        ) from exc
+    if not 1 <= downsample <= 4:
+        raise ValueError("LUMENOIR_RETINEX_DOWNSAMPLE must be between 1 and 4.")
+    return LumenRetinexConfig(illumination_downsample=downsample)
+
+
+def _hue_lock_config_from_environment() -> HueLockConfig:
+    """Resolve opt-in source-chroma anchoring; off by default."""
+    raw = os.getenv("LUMENOIR_HUELOCK_SOURCE_ANCHOR", "0").strip()
+    try:
+        strength = float(raw or "0")
+    except ValueError as exc:
+        raise ValueError(
+            "LUMENOIR_HUELOCK_SOURCE_ANCHOR must be between 0 and 0.55."
+        ) from exc
+    if not np.isfinite(strength) or not 0.0 <= strength <= 0.55:
+        raise ValueError("LUMENOIR_HUELOCK_SOURCE_ANCHOR must be between 0 and 0.55.")
+    return HueLockConfig(source_anchor_strength=strength)
+
+
 def _require(value: object, name: str) -> None:
     if value is None:
         raise RuntimeError(f"Pipeline stage dependency '{name}' is missing.")
@@ -230,13 +258,18 @@ class ClassicalStage(ImplementedStage):
             result = enhance_tensor(
                 context.rgb_tensor,
                 scan_result=context.scan_result,
+                config=_retinex_config_from_environment(),
                 ops=context.ops,
             )
             context.classical_tensor = result.image
             context.enhanced_tensor = result.image
             array = context.ops.to_numpy(result.image)
         else:
-            result = retinex_enhance(context.rgb, scan_result=context.scan_result)
+            result = retinex_enhance(
+                context.rgb,
+                scan_result=context.scan_result,
+                config=_retinex_config_from_environment(),
+            )
             context.classical = result.image
             context.enhanced = result.image
             array = result.image
@@ -444,13 +477,18 @@ class ColourCorrectionStage(ImplementedStage):
             result = correct_tensor(
                 context.enhanced_tensor,
                 scan_result=context.scan_result,
+                config=_hue_lock_config_from_environment(),
+                reference_rgb=context.rgb_tensor,
                 ops=context.ops,
             )
             context.enhanced_tensor = result.image
             array = context.ops.to_numpy(result.image)
         else:
             result = hue_lock_correct(
-                context.enhanced, scan_result=context.scan_result
+                context.enhanced,
+                scan_result=context.scan_result,
+                config=_hue_lock_config_from_environment(),
+                reference_rgb=context.rgb,
             )
             context.enhanced = result.image
             array = result.image
