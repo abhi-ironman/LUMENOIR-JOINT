@@ -135,12 +135,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=_checkpoint_arg,
         required=True,
         metavar="LABEL=PATH",
-        help="Repeat for each checkpoint; each file is SHA-256 recorded and left untouched.",
+        help=(
+            "Repeat for each checkpoint; each file is SHA-256 recorded "
+            "and left untouched."
+        ),
     )
     parser.add_argument(
         "--datasets",
         default=",".join(DEFAULT_DATASETS),
-        help="Comma-separated paired dataset keys (default: LOL-v1, LOL-v2 Real, LOL-v2 Synthetic).",
+        help=(
+            "Comma-separated paired dataset keys "
+            "(default: LOL-v1, LOL-v2 Real, LOL-v2 Synthetic)."
+        ),
     )
     parser.add_argument("--device", default=None, help="Override configured device.")
     parser.add_argument(
@@ -153,7 +159,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--latency-runs", type=int, default=None)
     parser.add_argument(
         "--model-scale-factor", type=int, default=1,
-        help="Use the same Zero-DCE++ inference scale for every checkpoint (default 1, matching the fine-tuning config).",
+        help=(
+            "Use the same Zero-DCE++ inference scale for every checkpoint "
+            "(default 1, matching the fine-tuning config)."
+        ),
     )
     parser.add_argument(
         "--retinex-downsample",
@@ -206,7 +215,11 @@ def main(argv: list[str] | None = None) -> int:
     if len(set(args.hue_anchor)) != len(args.hue_anchor):
         parser.error("--hue-anchor values must be unique.")
 
-    datasets = tuple(value.strip() for value in args.datasets.split(",") if value.strip())
+    datasets = tuple(
+        value.strip()
+        for value in args.datasets.split(",")
+        if value.strip()
+    )
     if not datasets:
         parser.error("At least one dataset must be selected.")
     try:
@@ -255,7 +268,12 @@ def main(argv: list[str] | None = None) -> int:
                 reference = run_evaluation(base_config)
             matrix["reference_run"] = _summary_dict(reference)
         except Exception as exc:
-            matrix["errors"].append({"run": "original-classical-reference", "error": str(exc)})
+            matrix["errors"].append(
+                {
+                    "run": "original-classical-reference",
+                    "error": str(exc),
+                }
+            )
 
     model_config = base_config.replace(modes=("deep_learning", "hybrid"))
     for label, checkpoint in args.checkpoint:
@@ -264,7 +282,11 @@ def main(argv: list[str] | None = None) -> int:
                 run_label = (
                     f"{label}/retinex-{downsample}/hue-anchor-{anchor:g}"
                 )
-                run_dir = args.output_dir / label / f"retinex-{downsample}_anchor-{anchor:g}"
+                run_dir = (
+                    args.output_dir
+                    / label
+                    / f"retinex-{downsample}_anchor-{anchor:g}"
+                )
                 try:
                     run_config = model_config.replace(
                         weights=checkpoint,
@@ -279,7 +301,12 @@ def main(argv: list[str] | None = None) -> int:
                         model_scale_factor=args.model_scale_factor,
                         hybrid_strategy=args.hybrid_strategy,
                     )
-                    outcome.update({"checkpoint_label": label, "checkpoint_sha256": _sha256(checkpoint)})
+                    outcome.update(
+                        {
+                            "checkpoint_label": label,
+                            "checkpoint_sha256": _sha256(checkpoint),
+                        }
+                    )
                     matrix["model_runs"].append(outcome)
                     print(
                         f"[{run_label}] records={outcome['record_count']} "
@@ -297,7 +324,10 @@ def main(argv: list[str] | None = None) -> int:
     if not matrix["model_runs"]:
         return 1
     if matrix["errors"]:
-        print(f"Completed with {len(matrix['errors'])} error(s); inspect matrix_manifest.json.")
+        print(
+            f"Completed with {len(matrix['errors'])} error(s); "
+            "inspect matrix_manifest.json."
+        )
         return 1
     return 0
 
