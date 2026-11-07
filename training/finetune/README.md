@@ -23,6 +23,24 @@ metrics.
     `baseline_metrics.csv`, `validation_comparison.csv`, `run_config.json`,
     `summary.md`, `summary.json`.
 
+### Current materialized manifest scope
+
+The committed `training/splits/train.json` (1,565 records) and
+`validation.json` (391 records) currently contain LOL-v1, LOL-v2 Real and
+LOL-v2 Synthetic only. Although `split_spec.json` declares SICE Part 1
+(2,422 training images and 600 validation images), those SICE records are not
+present in the checked-in manifests. The current fine-tuning loader requires
+paired low/high records and does not yet consume SICE Part 1's single-image
+zero-reference records.
+
+Therefore, the repository's default `zero_dce_plus_plus_lol.json` run is an
+LOL-only fine-tune, not the full SICE+LOL recipe in `final_decision.md` §1.3.
+Do not report SICE as part of the training data unless the actual
+`run_config.json` and manifests for that run confirm it. Extending the
+trainer to mix single-image SICE records with paired LOL validation data is a
+separate implementation task; it should be completed before claiming the full
+planned recipe.
+
 ## Loss terms
 
 The defaults are the documented Zero-DCE++ recipe plus the two LUMENOIR terms

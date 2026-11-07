@@ -16,9 +16,10 @@ desktops.
 > PNG.** The accelerator path runs every stage on CUDA/MPS tensors; CPU remains
 > the reference and fallback. Classical mode works without a model;
 > deep-learning and hybrid modes require a ready Zero-DCE++ checkpoint.
-> Train/validation manifests are committed (1,565 train pairs and 391
-> validation pairs); 118 test-leaking candidates were excluded. Dataset image
-> files remain outside Git under `datasets/raw`; ExDark and DICM are not local.
+> LOL train/validation manifests are committed (1,565 train pairs and 391
+> validation pairs); 118 test-leaking candidates were excluded. SICE Part 1 is
+> in the split specification but not yet in those manifests or the pair-only
+> trainer. Dataset images remain outside Git; ExDark and DICM are not local.
 > No full standardized evaluation has been run.
 
 ---
