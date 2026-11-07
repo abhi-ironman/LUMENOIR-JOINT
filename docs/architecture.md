@@ -86,7 +86,6 @@ torch-free. Full details: [`gpu_pipeline.md`](gpu_pipeline.md).
 
 | Area | Status |
 | --- | --- |
-| Cross-checkpoint / cross-configuration selection | Not implemented (experiment runner records the comparison matrix) |
 | Optuna coefficient tuning (§5.6) | Not implemented |
 | Paired Zero-DCE++ fine-tuning | Trainer implemented; remote training run and final checkpoint remain external |
 | Cross-checkpoint / cross-configuration quality selection | Not implemented; the evaluation runner records the comparison matrix |

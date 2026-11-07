@@ -131,7 +131,7 @@ def measure_phase_metrics(
     source: Image.Image | np.ndarray,
     output: Image.Image | np.ndarray,
 ) -> PhaseMetrics:
-    """Measure new clipping, median luma, Immerkaer noise and hue shift."""
+    """Measure §6.4 new-clip percentage, median luma, noise and hue shift."""
     source_rgb = _as_rgb(source)
     output_rgb = _as_rgb(output)
     if source_rgb.shape != output_rgb.shape:
@@ -139,9 +139,9 @@ def measure_phase_metrics(
             f"Source shape {source_rgb.shape} must match output {output_rgb.shape}."
         )
 
-    source_clipped = source_rgb.max(axis=2) >= 0.98
-    output_clipped = output_rgb.max(axis=2) >= 0.98
-    new_clip = float(np.logical_and(output_clipped, ~source_clipped).mean())
+    source_clip_fraction = float((source_rgb.max(axis=2) >= 0.98).mean())
+    output_clip_fraction = float((output_rgb.max(axis=2) >= 0.98).mean())
+    new_clip = max(0.0, output_clip_fraction - source_clip_fraction)
     output_luma = luminance(output_rgb)
     median = float(np.median(output_luma))
     sigma = noise_sigma(output_luma)
