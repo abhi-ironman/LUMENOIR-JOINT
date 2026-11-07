@@ -108,3 +108,29 @@ def test_fusion_strategy_defaults_to_legacy_and_accepts_dl_primary(monkeypatch) 
     monkeypatch.setenv("LUMENOIR_HYBRID_STRATEGY", "unknown")
     with pytest.raises(ValueError, match="LUMENOIR_HYBRID_STRATEGY"):
         _hybrid_fusion_strategy()
+
+def test_dl_primary_config_reads_validated_environment(monkeypatch) -> None:
+    from backend.enhancement.stages import _dl_primary_config_from_environment
+
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH", "0.65")
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_MAX_CORRECTION", "0.04")
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_EVIDENCE_FLOOR", "0.001")
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_EVIDENCE_SPAN", "0.02")
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_NOISE_LIMIT", "0.05")
+
+    config = _dl_primary_config_from_environment()
+
+    assert config.correction_strength == 0.65
+    assert config.max_correction == 0.04
+    assert config.evidence_floor == 0.001
+    assert config.evidence_span == 0.02
+    assert config.noise_limit == 0.05
+
+
+def test_dl_primary_config_rejects_non_numeric_environment(monkeypatch) -> None:
+    from backend.enhancement.stages import _dl_primary_config_from_environment
+
+    monkeypatch.setenv("LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH", "strong")
+
+    with pytest.raises(ValueError, match="LUMENOIR_DL_PRIMARY_CORRECTION_STRENGTH"):
+        _dl_primary_config_from_environment()
